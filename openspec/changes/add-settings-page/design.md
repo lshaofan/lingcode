@@ -1,210 +1,678 @@
-# Design: 设置页面架构
+# Design: 主窗口和设置系统架构
 
 ## UI 布局设计
 
-### 整体布局
+### 主窗口整体布局
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  聆码 Lingcode                         [最小化] [最大化] [×] │
+├────────────┬─────────────────────────────────────────────┤
+│            │                                             │
+│  📱 首页   │                                             │
+│            │         主内容区域                           │
+│  📝 笔记   │         (根据选中的导航显示不同页面)          │
+│            │                                             │
+│  ⚙️ 设置   │                                             │
+│            │                                             │
+│            │                                             │
+│            │                                             │
+└────────────┴─────────────────────────────────────────────┘
+```
+
+**说明:**
+- 左侧导航宽度: 200px
+- 右侧内容区占据剩余空间
+- 窗口最小尺寸: 900x600px
+- 推荐尺寸: 1200x800px
+
+---
+
+## 1. 首页设计 (HomePage)
+
+### 布局结构
+
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  聆码 Lingcode               v1.0.0    [最小化] [×]     │
-├─────────────┬───────────────────────────────────────────┤
-│             │                                           │
-│  通用设置   │   ┌─ 通用设置 ─────────────────────────┐ │
-│  语音识别   │   │                                    │ │
-│  快捷键     │   │  语言:  [中文 ▼]                  │ │
-│  历史记录   │   │  主题:  ○ 浅色 ● 深色 ○ 自动     │ │
-│  关于       │   │  [ ] 开机自动启动                  │ │
-│             │   │  [✓] 显示通知                      │ │
-│             │   │                                    │ │
-│             │   └────────────────────────────────────┘ │
-│             │                                           │
-├─────────────┴───────────────────────────────────────────┤
-│                           [保存]  [重置为默认]          │
+│                                                         │
+│  ┌───────────────────────────────────────────────────┐ │
+│  │  按住 ^ Ctrl + ⌥ Opt 在任何应用中听写              │ │
+│  │                                                   │ │
+│  │  Flow 可在您的所有应用中使用。在电子邮件、消息、   │ │
+│  │  文档或其他任何地方尝试使用。使用 ctrl + opt +     │ │
+│  │  space 进入免提模式。                             │ │
+│  │                                                   │ │
+│  │                   [查看使用方法]                   │ │
+│  └───────────────────────────────────────────────────┘ │
+│                                                         │
+│  今天                                                   │
+│  ┌───────────────────────────────────────────────────┐ │
+│  │  09:21 PM                                         │ │
+│  │  我把窗口的宽度调成了1000,然后你把里面的UI组件样式 │ │
+│  │  再美化一下。                                      │ │
+│  ├───────────────────────────────────────────────────┤ │
+│  │  09:20 PM                                         │ │
+│  │  我手动修改了代码桩的宽度,按照自己的要求已经调好了。│ │
+│  │  但是现在这个宽度的UI样式有问题,圆角太圆了。       │ │
+│  ├───────────────────────────────────────────────────┤ │
+│  │  08:56 PM                                         │ │
+│  │  应该是让这个悬浮球的窗口基于悬浮球实际的组件大小去 │ │
+│  │  生成。准确地说,是让悬浮球的实际组件去承载这个窗口  │ │
+│  │  的大小。                                          │ │
+│  └───────────────────────────────────────────────────┘ │
+│                                                         │
 └─────────────────────────────────────────────────────────┘
 ```
 
-### 组件层次结构
+### 组件结构
+
 ```
-SettingsPage (src/windows/main/SettingsPage.tsx)
-├── SettingsSidebar (侧边栏导航)
-│   ├── SettingsTab × 5
-│   └── Version信息
-└── SettingsContent (内容区域)
-    ├── GeneralSettings (通用设置)
-    ├── VoiceSettings (语音设置)
-    ├── ShortcutSettings (快捷键设置)
-    ├── HistorySettings (历史记录)
-    └── AboutSettings (关于)
+HomePage.tsx
+├── ShortcutTip Card (快捷键提示卡片)
+│   ├── Title (标题)
+│   ├── Description (说明文字)
+│   └── Button (可选的查看使用方法按钮)
+└── TranscriptionHistory (转录历史)
+    ├── SectionTitle ("今天")
+    └── TranscriptionList
+        └── TranscriptionItem × N
+            ├── Timestamp (时间戳)
+            └── Content (转录文本)
 ```
+
+### 样式设计
+
+**快捷键提示卡片:**
+- 背景: 浅色卡片背景(白色或浅灰)
+- 圆角: 12px
+- 内边距: 24px
+- 阴影: 轻微阴影,突出卡片
+- 标题字号: 18px, 加粗
+- 说明文字: 14px, 行高 1.6
+
+**转录历史列表:**
+- 标题 "今天": 16px, 加粗, 灰色
+- 每条记录:
+  - 背景: 白色卡片
+  - 圆角: 8px
+  - 内边距: 16px
+  - 边距: 上下间距 8px
+  - 时间戳: 12px, 灰色
+  - 文本内容: 14px, 黑色, 行高 1.5
+- 悬停效果: 背景色稍微加深
+
+---
+
+## 2. 笔记页面设计 (NotesPage)
+
+### 一期占位设计
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                                                         │
+│                                                         │
+│                                                         │
+│                                                         │
+│                      📝                                 │
+│                                                         │
+│              此功能正在开发中,敬请期待                   │
+│                                                         │
+│                                                         │
+│                                                         │
+│                                                         │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 组件结构
+
+```
+NotesPage.tsx
+└── EmptyState (空状态组件)
+    ├── Icon (大号图标 📝)
+    └── Message (提示文字)
+```
+
+### 样式设计
+
+- 垂直水平居中
+- 图标大小: 64px
+- 文字: 16px, 灰色
+- 整体淡灰色调,表示功能未激活
+
+---
+
+## 3. 设置弹窗设计 (SettingsDialog)
+
+### 弹窗整体布局
+
+```
+背景遮罩(半透明黑色)
+┌─────────────────────────────────────────────────────────┐
+│  设置                                            [×]     │
+├──────────────┬──────────────────────────────────────────┤
+│              │                                          │
+│  ⚙️ 通用设置 │                                          │
+│              │                                          │
+│  💻 系统设置 │         当前选中的设置面板内容              │
+│              │                                          │
+│  🤖 模型设置 │                                          │
+│              │                                          │
+│              │                                          │
+│              │                                          │
+├──────────────┴──────────────────────────────────────────┤
+│  聆码 v1.0.0                                            │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 弹窗规格
+
+- 宽度: 800px
+- 高度: 600px
+- 圆角: 12px
+- 阴影: 较强阴影,突出层级
+- 左侧导航宽度: 200px
+- 底部版本栏高度: 40px
+
+### 组件结构
+
+```
+SettingsDialog.tsx (Modal 对话框)
+├── DialogHeader (顶部栏)
+│   ├── Title ("设置")
+│   └── CloseButton ([×])
+├── DialogBody (主体)
+│   ├── SettingsSidebar (左侧导航)
+│   │   ├── NavItem ("通用设置") ⚙️
+│   │   ├── NavItem ("系统设置") 💻
+│   │   └── NavItem ("模型设置") 🤖
+│   └── SettingsContent (右侧内容)
+│       ├── GeneralSettings (通用设置面板)
+│       ├── SystemSettings (系统设置面板)
+│       └── ModelSettings (模型设置面板)
+└── DialogFooter (底部栏)
+    └── VersionLabel ("聆码 v1.0.0")
+```
+
+---
+
+## 4. 通用设置面板 (GeneralSettings)
+
+### 布局设计
+
+```
+┌──────────────────────────────────────────────────────┐
+│  通用设置                                            │
+│                                                      │
+│  键盘快捷键                                          │
+│  按住 ^ Ctrl + ⌥ Opt 并说话 [了解更多 →]   [更改]   │
+│                                                      │
+│  麦克风                                              │
+│  自动检测 (CF2000)                            [更改] │
+│                                                      │
+│  语言                                                │
+│  中文(简体)                                   [更改] │
+│                                                      │
+└──────────────────────────────────────────────────────┘
+```
+
+### 组件结构
+
+```
+GeneralSettings.tsx
+├── SettingItem (键盘快捷键)
+│   ├── Label + LearnMore Link
+│   ├── Value Display
+│   └── ChangeButton
+├── SettingItem (麦克风)
+│   ├── Label
+│   ├── Value Display
+│   └── ChangeButton
+└── SettingItem (语言)
+    ├── Label
+    ├── Value Display
+    └── ChangeButton
+```
+
+### 样式设计
+
+- 每个设置项:
+  - 背景: 浅灰色卡片
+  - 圆角: 8px
+  - 内边距: 16px
+  - 上下间距: 12px
+- 标签文字: 14px, 加粗
+- 值显示: 14px, 普通
+- [更改] 按钮: 灰色背景, hover 时变深
+
+---
+
+## 5. 语言选择弹窗 (LanguageSelector)
+
+### 布局设计
+
+```
+┌───────────────────────────────────────────────────────┐
+│  Languages                       Auto-detect  [ ON ]  │
+│  ───────────────────────────────────────────────────  │
+│  Select the languages you want to use with Flow       │
+│                                                       │
+│  🔍 Search for any languages                          │
+│                                                       │
+│  ┌─────────────────────┐  ┌──────────────────┐      │
+│  │ 🇨🇳 Mandarin        │  │   Selected       │      │
+│  │    (Simplified)     │  │                  │      │
+│  └─────────────────────┘  │  🇨🇳 Mandarin    │      │
+│  ┌─────────────────────┐  │    (Simplified) —│      │
+│  │ 🇺🇸 English         │  │                  │      │
+│  └─────────────────────┘  └──────────────────┘      │
+│                                                       │
+│                              [保存并关闭]             │
+└───────────────────────────────────────────────────────┘
+```
+
+### 组件结构
+
+```
+LanguageSelector.tsx (Modal 对话框)
+├── Header
+│   ├── Title ("Languages")
+│   └── AutoDetectToggle
+├── Description
+├── SearchBox
+├── LanguageGrid (左侧)
+│   ├── LanguageCard (中文简体) 🇨🇳
+│   └── LanguageCard (英语) 🇺🇸
+├── SelectedList (右侧)
+│   └── SelectedLanguage × N
+└── Footer
+    └── SaveButton ("保存并关闭")
+```
+
+### 交互逻辑
+
+1. **点击语言卡片** → 添加到右侧"已选择"列表
+2. **点击已选择项的 "—" 按钮** → 从列表移除
+3. **搜索框输入** → 实时过滤左侧语言列表(一期只有两个,无需过滤)
+4. **Auto-detect 开关** → 开启后自动检测语言
+5. **点击"保存并关闭"** → 保存设置并关闭弹窗
+
+---
+
+## 6. 系统设置面板 (SystemSettings)
+
+### 布局设计
+
+```
+┌──────────────────────────────────────────────────────┐
+│  系统设置                                            │
+│                                                      │
+│  App settings                                        │
+│                                                      │
+│  ┌────────────────────────────────────────────────┐ │
+│  │  开机自动启动                           [ OFF ] │ │
+│  │  Launch app at login                           │ │
+│  └────────────────────────────────────────────────┘ │
+│                                                      │
+│  ┌────────────────────────────────────────────────┐ │
+│  │  在 Dock 中显示                         [ ON ]  │ │
+│  │  Show app in dock                              │ │
+│  └────────────────────────────────────────────────┘ │
+│                                                      │
+└──────────────────────────────────────────────────────┘
+```
+
+### 组件结构
+
+```
+SystemSettings.tsx
+├── SectionTitle ("App settings")
+├── ToggleItem (开机自动启动)
+│   ├── Label (中文 + 英文)
+│   └── Toggle Switch
+└── ToggleItem (在 Dock 中显示)
+    ├── Label (中文 + 英文)
+    └── Toggle Switch
+```
+
+### Toggle 开关样式
+
+- 关闭状态: 灰色背景
+- 开启状态: 绿色背景(#10B981 或类似)
+- 圆形滑块: 白色
+- 尺寸: 宽 44px, 高 24px
+- 动画: 200ms 缓动过渡
+
+---
+
+## 7. 模型设置面板 (ModelSettings)
+
+### 布局设计
+
+```
+┌──────────────────────────────────────────────────────┐
+│  模型设置                                            │
+│                                                      │
+│  Whisper 模型选择                                    │
+│                                                      │
+│  ○ Base (74MB, 快速, 一般精度) 推荐          ✓ 已下载│
+│  ○ Small (244MB, 较快, 较高精度)             [下载]  │
+│  ○ Medium (769MB, 较慢, 高精度)              [下载]  │
+│  ○ Large (1.5GB, 慢, 最高精度)               [下载]  │
+│                                                      │
+│  已下载的模型                                        │
+│  ┌────────────────────────────────────────────────┐ │
+│  │  Base (74MB)                            [删除] │ │
+│  └────────────────────────────────────────────────┘ │
+│                                                      │
+└──────────────────────────────────────────────────────┘
+```
+
+### 组件结构
+
+```
+ModelSettings.tsx
+├── SectionTitle ("Whisper 模型选择")
+├── RadioGroup
+│   ├── ModelOption (Base) ○
+│   │   ├── Radio Button
+│   │   ├── ModelInfo (名称 + 大小 + 描述 + 标签)
+│   │   └── StatusIndicator (✓ 已下载 / [下载] / 进度条)
+│   ├── ModelOption (Small) ○
+│   ├── ModelOption (Medium) ○
+│   └── ModelOption (Large) ○
+├── SectionTitle ("已下载的模型")
+└── DownloadedModelList
+    └── ModelItem × N
+        ├── Name + Size
+        └── DeleteButton
+```
+
+### 模型下载状态
+
+**状态 1 - 未下载:**
+- 显示灰色 [下载] 按钮
+- 鼠标悬停变深灰
+
+**状态 2 - 下载中:**
+- 显示进度条
+- 百分比显示 (如 "45%")
+- [取消] 按钮
+
+**状态 3 - 已下载:**
+- 绿色 ✓ 标记
+- "已下载" 文字
+
+**状态 4 - 下载失败:**
+- 红色 ✗ 标记
+- "下载失败" 文字
+- [重试] 按钮
+
+---
 
 ## 状态管理策略
 
 ### Zustand Stores
-使用现有的 stores,无需新增:
-- `settingsStore`: 管理所有设置项
-- `historyStore`: 管理转录历史记录
+
+使用和扩展现有的 stores:
+
+**settingsStore:**
+```typescript
+interface SettingsStore {
+  settings: {
+    language: 'zh' | 'en';
+    shortcut: string;
+    microphone: string;
+    model: 'base' | 'small' | 'medium' | 'large';
+    autoLaunch: boolean;
+    showInDock: boolean;
+  };
+  updateSetting: (key, value) => void;
+}
+```
+
+**historyStore:**
+```typescript
+interface HistoryStore {
+  transcriptions: Transcription[];
+  todayTranscriptions: Transcription[];
+  loadTodayHistory: () => void;
+}
+```
+
+**uiStore (可能新增):**
+```typescript
+interface UIStore {
+  currentPage: 'home' | 'notes' | 'settings';
+  settingsTab: 'general' | 'system' | 'model';
+  isLanguageSelectorOpen: boolean;
+}
+```
 
 ### 数据流
+
 ```
-UI 组件 → Zustand Action → Tauri Command → SQLite → 返回结果 → 更新 Store → 触发 UI 重新渲染
+用户操作 (点击、输入)
+  ↓
+UI 事件处理函数
+  ↓
+Zustand Action
+  ↓
+Tauri Command (异步)
+  ↓
+Rust 后端 (数据库/系统 API)
+  ↓
+返回结果
+  ↓
+更新 Zustand Store
+  ↓
+React 重新渲染 UI
 ```
 
-## 各设置区域详细设计
-
-### 1. 通用设置 (GeneralSettings)
-**组件:** `src/windows/main/settings/GeneralSettings.tsx`
-
-**字段:**
-- 语言: Select 下拉框(默认中文,暂时禁用其他选项)
-- 主题: Radio Group (light/dark/auto)
-- 自动启动: Toggle Switch
-- 通知: Toggle Switch
-
-**交互:**
-- 所有设置变更立即保存到 store
-- 主题变更立即应用(不需要重启)
-
-### 2. 语音识别设置 (VoiceSettings)
-**组件:** `src/windows/main/settings/VoiceSettings.tsx`
-
-**字段:**
-- 模型选择: Radio Group
-  - Base (74MB, 快速, 一般精度) ✓ 推荐
-  - Small (244MB, 较快, 较高精度)
-  - Medium (769MB, 较慢, 高精度)
-  - Large (1.5GB, 慢, 最高精度)
-- 模型状态显示:
-  - 已下载: ✓ 绿色标记
-  - 未下载: [下载] 按钮
-  - 下载中: 进度条
-
-**交互:**
-- 选择模型后自动保存
-- 如果模型未下载,显示下载按钮和预计大小
-- 下载过程显示进度条
-
-### 3. 快捷键设置 (ShortcutSettings)
-**组件:** `src/windows/main/settings/ShortcutSettings.tsx`
-
-**字段:**
-- 录音快捷键: 可编辑的快捷键输入框
-  - 默认: Cmd+Shift+S
-  - 点击输入框后,监听键盘按键
-  - 显示当前快捷键组合
-- 冲突检测: 检测系统快捷键冲突并警告
-
-**交互:**
-- 点击输入框进入"等待按键"状态
-- 按下键盘组合后,验证是否合法
-- 保存前检测冲突
-- 保存后立即生效(无需重启)
-
-### 4. 历史记录 (HistorySettings)
-**组件:** `src/windows/main/settings/HistorySettings.tsx`
-
-**字段:**
-- 搜索框: 搜索转录文本内容
-- 记录列表: 时间倒序显示
-  - 显示: 时间、文本预览(前50字)、时长
-  - 操作: [复制] [删除]
-- 批量操作: [全选] [删除选中] [清空所有]
-- 分页: 每页20条
-
-**交互:**
-- 搜索实时过滤
-- 点击记录展开查看完整文本
-- 删除操作需要确认
-- "清空所有"需要二次确认
-
-### 5. 关于 (AboutSettings)
-**组件:** `src/windows/main/settings/AboutSettings.tsx`
-
-**内容:**
-- 应用图标
-- 应用名称: 聆码 Lingcode
-- 版本号: v1.0.0
-- 描述: 跨应用语音听写工具
-- GitHub 链接: 可点击打开浏览器
-- 开源协议: MIT / Apache 2.0
-- 检查更新按钮(未来实现)
+---
 
 ## 技术实现细节
 
-### 主题切换实现
-- 使用 CSS 变量定义颜色主题
-- `data-theme` 属性控制当前主题
-- `auto` 模式监听系统主题变化(使用 `prefers-color-scheme` media query)
+### 快捷键录制
 
-### 快捷键录制实现
 ```typescript
-const [isRecording, setIsRecording] = useState(false);
-const [keys, setKeys] = useState<string[]>([]);
+const useShortcutRecorder = () => {
+  const [isRecording, setIsRecording] = useState(false);
+  const [shortcut, setShortcut] = useState('');
 
-const handleKeyDown = (e: KeyboardEvent) => {
-  if (!isRecording) return;
-  e.preventDefault();
+  useEffect(() => {
+    if (!isRecording) return;
 
-  const modifiers = [];
-  if (e.metaKey) modifiers.push('Cmd');
-  if (e.ctrlKey) modifiers.push('Ctrl');
-  if (e.shiftKey) modifiers.push('Shift');
-  if (e.altKey) modifiers.push('Alt');
+    const handleKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      const keys = [];
 
-  if (!['Meta', 'Control', 'Shift', 'Alt'].includes(e.key)) {
-    modifiers.push(e.key.toUpperCase());
-    setKeys(modifiers);
-    setIsRecording(false);
-    // 保存快捷键
-    saveShortcut(modifiers.join('+'));
+      if (e.metaKey) keys.push('Cmd');
+      if (e.ctrlKey) keys.push('Ctrl');
+      if (e.shiftKey) keys.push('Shift');
+      if (e.altKey) keys.push('Alt');
+
+      if (e.key && !['Meta', 'Control', 'Shift', 'Alt'].includes(e.key)) {
+        keys.push(e.key.toUpperCase());
+        setShortcut(keys.join('+'));
+        setIsRecording(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isRecording]);
+
+  return { shortcut, isRecording, startRecording: () => setIsRecording(true) };
+};
+```
+
+### 模型下载进度追踪
+
+```typescript
+const [downloadProgress, setDownloadProgress] = useState(0);
+const [isDownloading, setIsDownloading] = useState(false);
+
+const downloadModel = async (modelName: string) => {
+  setIsDownloading(true);
+
+  // 监听下载进度事件
+  const unlisten = await listen('model-download-progress', (event) => {
+    setDownloadProgress(event.payload.progress);
+  });
+
+  try {
+    await invoke('download_model', { model: modelName });
+    toast.success(`${modelName} 模型下载完成`);
+  } catch (error) {
+    toast.error(`下载失败: ${error}`);
+  } finally {
+    setIsDownloading(false);
+    unlisten();
   }
 };
 ```
 
-### 历史记录虚拟滚动
-由于历史记录可能很多,使用虚拟滚动优化性能:
-- 使用 `react-window` 库
-- 只渲染可见区域的记录
-- 懒加载更多数据
+### 开机自启实现
+
+```rust
+// Rust 后端 (src-tauri/src/commands/system.rs)
+#[tauri::command]
+pub fn set_auto_launch(enable: bool) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use tauri_plugin_autostart::MacosLauncher;
+        let app_path = std::env::current_exe()
+            .map_err(|e| e.to_string())?;
+
+        if enable {
+            MacosLauncher::new(&app_path).enable()
+                .map_err(|e| e.to_string())?;
+        } else {
+            MacosLauncher::new(&app_path).disable()
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+```
+
+---
 
 ## 错误处理
 
-### 错误场景
-1. 设置保存失败
-2. 模型下载失败
-3. 快捷键冲突
-4. 历史记录加载失败
+### Toast 通知
 
-### 处理策略
-- 使用 Toast 组件显示错误信息
-- 设置保存失败后回滚到之前的值
-- 网络错误时提供重试按钮
-- 数据加载失败显示错误状态和重新加载按钮
+使用现有的 Toast 组件显示操作反馈:
+
+- **成功**: 绿色背景, ✓ 图标
+- **错误**: 红色背景, ✗ 图标
+- **警告**: 黄色背景, ⚠️ 图标
+- **信息**: 蓝色背景, ℹ️ 图标
+
+### 错误恢复
+
+```typescript
+const updateSetting = async (key: string, value: any) => {
+  const previousValue = settings[key];
+
+  // 乐观更新
+  setSettings({ ...settings, [key]: value });
+
+  try {
+    await invoke('set_setting', { key, value: JSON.stringify(value) });
+    toast.success('设置已保存');
+  } catch (error) {
+    // 失败后回滚
+    setSettings({ ...settings, [key]: previousValue });
+    toast.error(`保存失败: ${error}`);
+  }
+};
+```
+
+---
 
 ## 性能优化
 
-### 优化策略
-1. **防抖 (Debounce)**: 搜索输入、设置变更
-2. **虚拟滚动**: 历史记录列表
-3. **React.memo**: 设置项组件
-4. **懒加载**: 各设置标签页按需加载
+### React.memo 优化
 
-### 预期性能指标
-- 设置页面初始加载: < 300ms
-- 标签页切换: < 50ms
-- 搜索响应: < 100ms (防抖后)
-- 设置保存: < 200ms
+```typescript
+const SettingItem = React.memo(({ label, value, onChange }) => {
+  return (
+    <div className="setting-item">
+      <label>{label}</label>
+      <input value={value} onChange={onChange} />
+    </div>
+  );
+});
+```
 
-## 可访问性 (Accessibility)
+### 防抖搜索
 
-- 键盘导航: Tab 键在设置项间切换
-- ARIA 标签: 为所有交互元素添加标签
-- 焦点管理: 切换标签页时聚焦到内容区域
-- 屏幕阅读器友好: 状态变化有语音提示
+```typescript
+const debouncedSearch = useMemo(
+  () => debounce((query: string) => {
+    // 执行搜索
+  }, 300),
+  []
+);
+```
+
+### 懒加载设置面板
+
+```typescript
+const GeneralSettings = lazy(() => import('./settings/GeneralSettings'));
+const SystemSettings = lazy(() => import('./settings/SystemSettings'));
+const ModelSettings = lazy(() => import('./settings/ModelSettings'));
+
+// 使用 Suspense
+<Suspense fallback={<Loading />}>
+  {currentTab === 'general' && <GeneralSettings />}
+  {currentTab === 'system' && <SystemSettings />}
+  {currentTab === 'model' && <ModelSettings />}
+</Suspense>
+```
+
+---
+
+## 可访问性
+
+### 键盘导航
+
+- Tab 键: 在可交互元素间切换
+- Enter 键: 激活按钮和开关
+- Escape 键: 关闭弹窗
+- 方向键: 在导航菜单间切换
+
+### ARIA 标签
+
+```tsx
+<button
+  aria-label="关闭设置"
+  aria-pressed={isOpen}
+  onClick={onClose}
+>
+  ×
+</button>
+
+<input
+  type="checkbox"
+  role="switch"
+  aria-checked={isEnabled}
+  aria-label="开机自动启动"
+/>
+```
+
+---
 
 ## 未来扩展
 
-### 可能的增强功能
-- 设置导入/导出
-- 云同步设置(可选)
-- 高级设置折叠面板
-- 快捷操作搜索(Cmd+K)
-- 多语言支持(英文、日文等)
+### 二期功能
+
+1. **主题切换** - 浅色/深色/自动
+2. **笔记功能完整实现**
+3. **历史记录高级搜索和筛选**
+4. **设置导入导出**
+5. **多语言界面支持**
+6. **快捷键冲突检测优化**
+7. **模型自动更新检查**
