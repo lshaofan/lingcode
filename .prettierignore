@@ -1,0 +1,8 @@
+dist
+target
+node_modules
+.git
+.idea
+*.lock
+pnpm-lock.yaml
+Cargo.lock
