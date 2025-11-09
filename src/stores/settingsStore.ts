@@ -4,11 +4,14 @@ import { invoke } from '@tauri-apps/api/core';
 
 export interface Settings {
   language: string;
-  model: string;
+  model: 'base' | 'small' | 'medium' | 'large';
   shortcut: string;
+  microphone: string;
   theme: 'light' | 'dark' | 'auto';
   autoStart: boolean;
+  showInDock: boolean;
   notifications: boolean;
+  autoDetectLanguage: boolean;
 }
 
 interface SettingsStore {
@@ -29,14 +32,17 @@ const defaultSettings: Settings = {
   language: 'zh',
   model: 'base',
   shortcut: 'Cmd+Shift+S',
+  microphone: 'auto',
   theme: 'auto',
   autoStart: false,
+  showInDock: true,
   notifications: true,
+  autoDetectLanguage: true,
 };
 
 export const useSettingsStore = create<SettingsStore>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       settings: defaultSettings,
       loading: false,
       error: null,
@@ -48,13 +54,13 @@ export const useSettingsStore = create<SettingsStore>()(
             'get_all_settings',
           );
 
-          const settings = { ...defaultSettings };
+          const settings: Settings = { ...defaultSettings };
           allSettings.forEach(({ key, value }) => {
             if (key in settings) {
               try {
-                settings[key as keyof Settings] = JSON.parse(value);
+                (settings as any)[key] = JSON.parse(value);
               } catch {
-                settings[key as keyof Settings] = value as any;
+                (settings as any)[key] = value;
               }
             }
           });

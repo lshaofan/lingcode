@@ -10,7 +10,8 @@
       "SlashCommand(/openspec:apply add-project-initialization)",
       "SlashCommand(/openspec:proposal)",
       "SlashCommand(/openspec:apply:*)",
-      "SlashCommand(/openspec:archive:*)"
+      "SlashCommand(/openspec:archive:*)",
+      "SlashCommand(/openspec:proposal:*)"
     ],
     "deny": [],
     "ask": []

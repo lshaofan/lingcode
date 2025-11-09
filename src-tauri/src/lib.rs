@@ -6,7 +6,7 @@ mod db;
 mod shortcut;
 mod tray;
 
-use commands::{db::*, window::*};
+use commands::{db::*, model::*, system::*, window::*};
 use db::Database;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -47,6 +47,15 @@ pub fn run() {
             toggle_recording_float,
             set_float_ignore_cursor,
             resize_recording_float,
+            // System commands
+            set_auto_launch,
+            get_auto_launch,
+            list_audio_devices,
+            // Model commands
+            get_available_models,
+            download_model,
+            delete_model,
+            get_downloaded_models,
         ])
         .setup(|app| {
             // Initialize database

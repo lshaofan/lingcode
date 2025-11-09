@@ -32,16 +32,16 @@
       {
         "label": "main",
         "title": "聆码",
-        "width": 800,
-        "height": 600,
+        "width": 1000,
+        "height": 700,
         "resizable": true,
         "fullscreen": false,
         "decorations": true,
         "transparent": false,
         "skipTaskbar": false,
         "center": true,
-        "minWidth": 600,
-        "minHeight": 400
+        "minWidth": 700,
+        "minHeight": 500
       }
     ],
     "security": {
@@ -53,7 +53,7 @@
       }
     },
     "trayIcon": {
-      "iconPath": "icons/icon.png",
+      "iconPath": "icons/tray/iconTemplate.png",
       "iconAsTemplate": true
     },
     "macOSPrivateApi": true

@@ -12,6 +12,7 @@ pub fn create_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 
     let menu = Menu::with_items(app, &[&show_item, &hide_item, &toggle_float_item, &quit_item])?;
 
+    // Use the icon from tauri.conf.json configuration
     let _tray = TrayIconBuilder::new()
         .menu(&menu)
         .on_menu_event(move |app, event| match event.id.as_ref() {
