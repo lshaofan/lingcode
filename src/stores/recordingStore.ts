@@ -119,7 +119,7 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
 
   stopRecording: async () => {
     try {
-      console.log('[RecordingStore] ⭐ stopRecording called, current state:', get().state)
+      console.log('[RecordingStore] ⭐⭐⭐ stopRecording called, current state:', get().state)
 
       // 不管当前状态是什么，都尝试停止录音（因为后台可能在录音）
       // 这可以处理由于重复调用导致的状态不一致问题
@@ -131,7 +131,9 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
       }
 
       const recordingDuration = get().duration
+      console.log('[RecordingStore] 🔵 Setting state to PROCESSING (before transcription)')
       set({ state: 'processing' })
+      console.log('[RecordingStore] 🔵 State set to PROCESSING, new state:', get().state)
 
       // 1. 停止录音
       console.log('[RecordingStore] Step 1: Calling stop_recording command...')
@@ -225,7 +227,8 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
 
       if (mode === 'direct') {
         // 直接插入模式：转录完成后保持 processing 状态，显示"正在插入..."
-        console.log('[RecordingStore] Direct mode: keeping processing state for text insertion')
+        console.log('[RecordingStore] 🔵🔵🔵 Direct mode: keeping processing state for text insertion')
+        console.log('[RecordingStore] Transcription text:', transcriptionText)
         set({
           state: 'processing', // 保持 processing 状态
           transcription: transcriptionText,
@@ -233,6 +236,7 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
           duration: 0,
           audioLevel: 0,
         })
+        console.log('[RecordingStore] 🔵 State updated, current state:', get().state, 'transcribedText:', get().transcribedText)
 
         // 插入文本（后端会自动激活原应用）
         console.log('[RecordingStore] Inserting text...')

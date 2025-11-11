@@ -7,7 +7,7 @@ import { useRecordingStore } from '../../stores';
 import { useSettingsStore } from '../../stores';
 
 export const RecordingFloat = () => {
-  console.log('[RecordingFloat] 🎬 Component function called');
+  console.log('[RecordingFloat] 🎬🎬🎬 Component function called (RE-RENDER)');
 
   const status = useRecordingStore((state) => state.state);
   const transcribedText = useRecordingStore((state) => state.transcribedText);
@@ -17,8 +17,9 @@ export const RecordingFloat = () => {
   const settings = useSettingsStore((state) => state.settings);
   const operationMode = settings.operationMode || 'preview';
 
-  console.log('[RecordingFloat] 📊 Current state:', { status, transcribedText: transcribedText?.substring(0, 50), audioLevel, operationMode });
+  console.log('[RecordingFloat] 📊📊📊 Current state:', { status, transcribedText: transcribedText?.substring(0, 50), audioLevel, operationMode });
   console.log('[RecordingFloat] 🎯 Operation mode:', operationMode);
+  console.log('[RecordingFloat] 🔴 STATUS =', status);
 
   const startRecording = useRecordingStore((state) => state.startRecording);
   const stopRecording = useRecordingStore((state) => state.stopRecording);
@@ -167,12 +168,13 @@ export const RecordingFloat = () => {
     };
 
     const stopHandler = async () => {
-      console.log('⏹️  [RecordingFloat] STOP event received');
+      console.log('⏹️ ⏹️ ⏹️  [RecordingFloat] STOP event received from backend');
       const settings = useSettingsStore.getState().settings;
       const mode = settings.operationMode || 'preview';
       const currentState = useRecordingStore.getState().state;
 
-      console.log('[RecordingFloat] Stop handler - mode:', mode, 'state:', currentState);
+      console.log('[RecordingFloat] 🔴🔴🔴 Stop handler - mode:', mode, 'state:', currentState);
+      console.log('[RecordingFloat] 🔴 About to call stopRecording()...');
 
       if (mode === 'preview') {
         // 预览模式: 停止录音并显示结果
@@ -392,7 +394,9 @@ export const RecordingFloat = () => {
 
   // 直接插入模式：始终显示录制/转录UI（没有"准备就绪"状态）
   if (operationMode === 'direct') {
-    console.log('[RecordingFloat] 🎨 Rendering direct mode UI, status:', status);
+    console.log('[RecordingFloat] 🎨🎨🎨 Rendering direct mode UI, status:', status);
+    console.log('[RecordingFloat] 🎨 transcribedText:', transcribedText);
+    console.log('[RecordingFloat] 🎨 Will show:', status === 'processing' ? '正在转录...' : '正在录制...');
     return (
       <div className="fixed inset-0 flex items-center justify-center">
         <div
