@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { useSettingsStore } from '../../../stores'
-import { RadioGroup, RadioOption, ProgressBar, Button } from '../../../components'
+import { useSettingsStore, useDownloadStore } from '../../../stores'
+import { RadioGroup, RadioOption, Button } from '../../../components'
 import { useToast } from '../../../components'
 
 type ModelType = 'small' | 'base' | 'medium' | 'large'
@@ -30,11 +30,10 @@ interface DownloadProgress {
 
 export const ModelSettings: React.FC = () => {
   const { settings, updateSetting } = useSettingsStore()
+  const { startDownload, updateProgress, completeDownload, failDownload } = useDownloadStore()
   const toast = useToast()
   const [models, setModels] = useState<ModelInfo[]>([])
   const [loading, setLoading] = useState(false)
-  const [downloadingModel, setDownloadingModel] = useState<string | null>(null)
-  const [downloadProgress, setDownloadProgress] = useState(0)
 
   useEffect(() => {
     const loadModelsAsync = async () => {
@@ -45,13 +44,12 @@ export const ModelSettings: React.FC = () => {
   }, [])
 
   useEffect(() => {
-    // 监听下载进度
+    // 监听下载进度事件
     const setupListener = async () => {
       const unlisten = await listen<DownloadProgress>('model-download-progress', (event) => {
         console.log('[ModelSettings] 📥 Received download progress:', event.payload)
-        const progress = event.payload.progress
-        console.log('[ModelSettings] 📊 Setting progress to:', progress)
-        setDownloadProgress(progress)
+        // 更新全局下载进度
+        updateProgress(event.payload)
       })
 
       return unlisten
@@ -62,7 +60,7 @@ export const ModelSettings: React.FC = () => {
         unlisten()
       }
     })
-  }, [])
+  }, [updateProgress])
 
   const loadModels = async () => {
     setLoading(true)
@@ -95,20 +93,27 @@ export const ModelSettings: React.FC = () => {
   }
 
   const handleDownload = async (modelName: string) => {
-    setDownloadingModel(modelName)
-    setDownloadProgress(0)
+    console.log('[ModelSettings] 🚀 Starting download for model:', modelName)
+
+    // 启动全局下载遮罩
+    startDownload(modelName)
 
     try {
       await invoke('download_model', { modelName })
+      console.log('[ModelSettings] ✅ Download completed successfully')
+
+      // 下载完成
+      completeDownload()
       toast.success(`${String(modelName).toUpperCase()} 模型下载完成`)
+
       // 重新加载模型列表
       await loadModels()
     } catch (error) {
+      console.error('[ModelSettings] ❌ Download failed:', error)
+
+      // 下载失败
+      failDownload(String(error))
       toast.error(`下载失败: ${String(error)}`)
-      console.error('Failed to download model:', error)
-    } finally {
-      setDownloadingModel(null)
-      setDownloadProgress(0)
     }
   }
 
@@ -131,11 +136,7 @@ export const ModelSettings: React.FC = () => {
   const radioOptions: RadioOption[] = models.map((model) => ({
     value: model.name,
     label: `${model.name.toUpperCase()} (${model.size}, ${model.speed}, ${model.accuracy})${model.is_recommended ? ' 推荐' : ''}`,
-    description: model.is_downloaded
-      ? '✓ 已下载'
-      : downloadingModel === model.name
-        ? `下载中... ${downloadProgress}%`
-        : '',
+    description: model.is_downloaded ? '✓ 已下载' : '',
   }))
 
   const downloadedModels = models.filter((m) => m.is_downloaded)
@@ -169,9 +170,7 @@ export const ModelSettings: React.FC = () => {
                     {model.name.toUpperCase()} ({model.size})
                   </span>
                   <div className="flex items-center gap-2">
-                    {downloadingModel === model.name ? (
-                      <ProgressBar progress={downloadProgress} size="sm" className="w-32" />
-                    ) : model.is_downloaded ? (
+                    {model.is_downloaded && (
                       <span className="text-xs text-green-600 flex items-center gap-1">
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                           <path
@@ -182,8 +181,8 @@ export const ModelSettings: React.FC = () => {
                         </svg>
                         已下载
                       </span>
-                    ) : null}
-                    {!model.is_downloaded && downloadingModel !== model.name && (
+                    )}
+                    {!model.is_downloaded && (
                       <Button
                         variant="secondary"
                         size="sm"

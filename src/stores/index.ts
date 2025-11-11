@@ -1,8 +1,11 @@
-export { useSettingsStore } from './settingsStore';
-export { useRecordingStore } from './recordingStore';
-export { useHistoryStore } from './historyStore';
-export { useUIStore } from './uiStore';
+export { useSettingsStore } from './settingsStore'
+export { useRecordingStore } from './recordingStore'
+export { useHistoryStore } from './historyStore'
+export { useUIStore } from './uiStore'
+export { useLoadingStore } from './loadingStore'
+export { useDownloadStore } from './downloadStore'
 
-export type { Settings } from './settingsStore';
-export type { RecordingState } from './recordingStore';
-export type { Transcription } from './historyStore';
+export type { Settings } from './settingsStore'
+export type { RecordingState } from './recordingStore'
+export type { Transcription } from './historyStore'
+export type { DownloadStatus } from './downloadStore'

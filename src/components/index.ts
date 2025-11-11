@@ -16,3 +16,7 @@ export { RadioGroup } from './RadioGroup'
 export type { RadioOption } from './RadioGroup'
 
 export { ProgressBar } from './ProgressBar'
+
+export { GlobalLoading } from './GlobalLoading'
+
+export { GlobalDownloadModal } from './GlobalDownloadModal'
