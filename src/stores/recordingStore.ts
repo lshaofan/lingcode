@@ -344,7 +344,8 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
   },
 
   insertText: async () => {
-    const text = get().transcribedText
+    // 使用 transcription 字段(实际的转录文本),而不是 transcribedText(UI 显示文本)
+    const text = get().transcription || get().transcribedText
     if (text) {
       try {
         console.log('[RecordingStore] Checking accessibility permission...')
