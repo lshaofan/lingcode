@@ -195,62 +195,73 @@ def download_model(
 
         # 下载单个模型的辅助函数（带重试和进度回调）
         def download_with_retry(model_id_to_download, display_name, retries=max_retries):
-            # 进度回调函数
-            def progress_callback(info):
-                """
-                ModelScope 下载进度回调
-                info: dict with keys: 'downloaded', 'total', 'percentage'
-                """
-                if 'percentage' in info:
-                    percentage = int(info['percentage'])
-                    # 发送进度更新（每5%更新一次，避免过于频繁）
-                    if percentage % 5 == 0 or percentage >= 95:
-                        downloaded = info.get('downloaded', 0)
-                        total = info.get('total', 0)
-                        if total > 0:
-                            downloaded_mb = downloaded / (1024 * 1024)
-                            total_mb = total / (1024 * 1024)
-                            msg = f"{downloaded_mb:.1f}MB / {total_mb:.1f}MB"
-                        else:
-                            msg = "下载中"
-                        print(f"PROGRESS:{percentage}:{display_name}:{msg}", file=sys.stderr)
+            # 创建进度回调类
+            try:
+                from modelscope.hub.callback import ProgressCallback
+
+                class CustomProgressCallback(ProgressCallback):
+                    def __init__(self, display_name):
+                        super().__init__()
+                        self.display_name = display_name
+                        self.last_reported = -1  # 上次报告的百分比
+
+                    def on_progress(self, current_size: int, total_size: int):
+                        """进度回调"""
+                        if total_size > 0:
+                            percentage = int((current_size / total_size) * 100)
+                            # 每5%或接近完成时更新
+                            if percentage != self.last_reported and (percentage % 5 == 0 or percentage >= 95):
+                                self.last_reported = percentage
+                                downloaded_mb = current_size / (1024 * 1024)
+                                total_mb = total_size / (1024 * 1024)
+                                msg = f"{downloaded_mb:.1f}MB / {total_mb:.1f}MB"
+                                print(f"PROGRESS:{percentage}:{self.display_name}:{msg}", file=sys.stderr)
+                                # 强制刷新 stderr
+                                sys.stderr.flush()
+
+                has_progress_callback = True
+            except ImportError:
+                has_progress_callback = False
+                print(f"⚠️  ModelScope 版本不支持 ProgressCallback", file=sys.stderr)
 
             for attempt in range(1, retries + 1):
                 try:
                     print(f"📥 [{attempt}/{retries}] 正在下载{display_name}: {model_id_to_download}", file=sys.stderr)
                     print(f"PROGRESS:0:{display_name}:开始下载", file=sys.stderr)  # 进度标记
+                    sys.stderr.flush()
 
                     # ModelScope 的 snapshot_download 支持断点续传和进度回调
-                    try:
-                        # 尝试使用进度回调（新版本 ModelScope）
+                    if has_progress_callback:
+                        # 使用进度回调
+                        callback = CustomProgressCallback(display_name)
                         result_dir = snapshot_download(
                             model_id_to_download,
                             cache_dir=cache_root,
-                            progress_callback=progress_callback,
+                            progress_callbacks=[callback],  # 注意是复数
                         )
-                    except TypeError:
-                        # 旧版本不支持 progress_callback，使用基础下载
-                        print(f"⚠️  ModelScope 版本较旧，不支持进度回调", file=sys.stderr)
+                    else:
+                        # 不使用进度回调，只显示开始和结束
+                        print(f"⏳ 正在下载（无法显示进度）...", file=sys.stderr)
+                        sys.stderr.flush()
                         result_dir = snapshot_download(
                             model_id_to_download,
                             cache_dir=cache_root,
                         )
-                        # 模拟进度（每秒检查一次）
-                        for i in range(1, 10):
-                            print(f"PROGRESS:{i * 10}:{display_name}:下载中...", file=sys.stderr)
-                            time.sleep(1)
 
                     print(f"PROGRESS:100:{display_name}:下载完成", file=sys.stderr)  # 进度标记
+                    sys.stderr.flush()
                     print(f"✅ {display_name}下载完成: {model_id_to_download}", file=sys.stderr)
                     return result_dir
 
                 except Exception as e:
                     error_msg = str(e)
                     print(f"❌ [{attempt}/{retries}] {display_name}下载失败: {error_msg}", file=sys.stderr)
+                    sys.stderr.flush()
 
                     if attempt < retries:
                         wait_time = attempt * 2  # 递增等待时间：2s, 4s, 6s
                         print(f"⏳ {wait_time}秒后重试...", file=sys.stderr)
+                        sys.stderr.flush()
                         time.sleep(wait_time)
                     else:
                         raise Exception(f"{display_name}下载失败（已重试{retries}次）: {error_msg}")
