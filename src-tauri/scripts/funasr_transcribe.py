@@ -193,60 +193,20 @@ def download_model(
                     return True
             return False
 
-        # 下载单个模型的辅助函数（带重试和进度回调）
+        # 下载单个模型的辅助函数（带重试）
         def download_with_retry(model_id_to_download, display_name, retries=max_retries):
-            # 创建进度回调类
-            try:
-                from modelscope.hub.callback import ProgressCallback
-
-                class CustomProgressCallback(ProgressCallback):
-                    def __init__(self, display_name):
-                        super().__init__()
-                        self.display_name = display_name
-                        self.last_reported = -1  # 上次报告的百分比
-
-                    def on_progress(self, current_size: int, total_size: int):
-                        """进度回调"""
-                        if total_size > 0:
-                            percentage = int((current_size / total_size) * 100)
-                            # 每5%或接近完成时更新
-                            if percentage != self.last_reported and (percentage % 5 == 0 or percentage >= 95):
-                                self.last_reported = percentage
-                                downloaded_mb = current_size / (1024 * 1024)
-                                total_mb = total_size / (1024 * 1024)
-                                msg = f"{downloaded_mb:.1f}MB / {total_mb:.1f}MB"
-                                print(f"PROGRESS:{percentage}:{self.display_name}:{msg}", file=sys.stderr)
-                                # 强制刷新 stderr
-                                sys.stderr.flush()
-
-                has_progress_callback = True
-            except ImportError:
-                has_progress_callback = False
-                print(f"⚠️  ModelScope 版本不支持 ProgressCallback", file=sys.stderr)
-
             for attempt in range(1, retries + 1):
                 try:
                     print(f"📥 [{attempt}/{retries}] 正在下载{display_name}: {model_id_to_download}", file=sys.stderr)
                     print(f"PROGRESS:0:{display_name}:开始下载", file=sys.stderr)  # 进度标记
                     sys.stderr.flush()
 
-                    # ModelScope 的 snapshot_download 支持断点续传和进度回调
-                    if has_progress_callback:
-                        # 使用进度回调
-                        callback = CustomProgressCallback(display_name)
-                        result_dir = snapshot_download(
-                            model_id_to_download,
-                            cache_dir=cache_root,
-                            progress_callbacks=[callback],  # 注意是复数
-                        )
-                    else:
-                        # 不使用进度回调，只显示开始和结束
-                        print(f"⏳ 正在下载（无法显示进度）...", file=sys.stderr)
-                        sys.stderr.flush()
-                        result_dir = snapshot_download(
-                            model_id_to_download,
-                            cache_dir=cache_root,
-                        )
+                    # ModelScope 的 snapshot_download 支持断点续传
+                    # 注意：progress_callback 功能在某些版本中不稳定，我们使用简单的开始/结束标记
+                    result_dir = snapshot_download(
+                        model_id_to_download,
+                        cache_dir=cache_root,
+                    )
 
                     print(f"PROGRESS:100:{display_name}:下载完成", file=sys.stderr)  # 进度标记
                     sys.stderr.flush()

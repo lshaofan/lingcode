@@ -39,19 +39,32 @@ export const GlobalDownloadModal: React.FC = () => {
             <>
               {/* 进度条 */}
               <div className="relative h-3 bg-gray-200 rounded-full overflow-hidden">
-                <div
-                  className="absolute left-0 top-0 h-full bg-gradient-to-r from-green-400 to-green-600 transition-all duration-300 ease-out"
-                  style={{ width: `${progress}%` }}
-                >
-                  {/* 动画波纹效果 */}
-                  <div className="absolute inset-0 bg-white opacity-20 animate-pulse" />
-                </div>
+                {progress > 0 && progress < 100 ? (
+                  // 有进度时显示确定的进度条
+                  <div
+                    className="absolute left-0 top-0 h-full bg-gradient-to-r from-green-400 to-green-600 transition-all duration-300 ease-out"
+                    style={{ width: `${progress}%` }}
+                  >
+                    <div className="absolute inset-0 bg-white opacity-20 animate-pulse" />
+                  </div>
+                ) : (
+                  // 无进度或刚开始时显示不确定的加载动画
+                  <div className="absolute inset-0 bg-gradient-to-r from-green-400 to-green-600 animate-pulse">
+                    <div
+                      className="h-full bg-gradient-to-r from-transparent via-white to-transparent opacity-30 animate-shimmer"
+                      style={{
+                        animation: 'shimmer 2s infinite',
+                        backgroundSize: '200% 100%',
+                      }}
+                    />
+                  </div>
+                )}
               </div>
 
               {/* 进度文字 */}
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600">{message}</span>
-                <span className="font-semibold text-green-600">{progress}%</span>
+                <span className="text-gray-600">{message || '正在下载...'}</span>
+                {progress > 0 && <span className="font-semibold text-green-600">{progress}%</span>}
               </div>
 
               {/* 加载动画 */}
