@@ -19,10 +19,13 @@ interface ModelInfo {
 }
 
 interface DownloadProgress {
-  model_name: string
+  model_name?: string
   progress: number
-  downloaded: number
-  total: number
+  downloaded?: number
+  total?: number
+  // FunASR 特有字段
+  component?: string
+  message?: string
 }
 
 export const ModelSettings: React.FC = () => {
@@ -45,7 +48,10 @@ export const ModelSettings: React.FC = () => {
     // 监听下载进度
     const setupListener = async () => {
       const unlisten = await listen<DownloadProgress>('model-download-progress', (event) => {
-        setDownloadProgress(event.payload.progress)
+        console.log('[ModelSettings] 📥 Received download progress:', event.payload)
+        const progress = event.payload.progress
+        console.log('[ModelSettings] 📊 Setting progress to:', progress)
+        setDownloadProgress(progress)
       })
 
       return unlisten

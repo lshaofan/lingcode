@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 type Page = 'home' | 'notes' | 'settings';
-type SettingsTab = 'general' | 'system' | 'model';
+type SettingsTab = 'environment' | 'general' | 'system' | 'model';
 
 interface UIStore {
   // 当前页面
@@ -28,10 +28,10 @@ export const useUIStore = create<UIStore>((set) => ({
   setCurrentPage: (page) => set({ currentPage: page }),
 
   isSettingsOpen: false,
-  openSettings: () => set({ isSettingsOpen: true, settingsTab: 'general' }),
+  openSettings: () => set({ isSettingsOpen: true, settingsTab: 'environment' }),
   closeSettings: () => set({ isSettingsOpen: false }),
 
-  settingsTab: 'general',
+  settingsTab: 'environment',
   setSettingsTab: (tab) => set({ settingsTab: tab }),
 
   isLanguageSelectorOpen: false,
