@@ -174,7 +174,6 @@ export const RecordingFloat = () => {
       const currentState = useRecordingStore.getState().state;
 
       console.log('[RecordingFloat] 🔴🔴🔴 Stop handler - mode:', mode, 'state:', currentState);
-      console.log('[RecordingFloat] 🔴 About to call stopRecording()...');
 
       if (mode === 'preview') {
         // 预览模式: 停止录音并显示结果
@@ -182,18 +181,22 @@ export const RecordingFloat = () => {
           await stopRecording();
         }
       } else {
-        // 直接插入模式: 停止录音,保持窗口显示直到插入完成
-        // stopRecording() 会自动处理:
-        // 1. 设置 processing 状态
-        // 2. 转录完成后插入文本
-        // 3. 插入完成后隐藏窗口
+        // 直接插入模式: 只在 recording 状态时才处理
+        // 🚨 CRITICAL FIX: 后端可能发送多次 stop 事件,我们需要防止重复处理
         if (currentState === 'recording') {
-          console.log('[RecordingFloat] Direct mode: calling stopRecording()');
+          console.log('[RecordingFloat] 🔴 Direct mode: calling stopRecording()');
           await stopRecording();
           // 注意: 不要在这里隐藏窗口!
-          // stopRecording 内部会在插入完成后隐藏窗口
+          // stopRecording 内部会:
+          // 1. 设置 processing 状态 (显示"正在转录...")
+          // 2. 转录完成后插入文本 (显示"正在插入文本...")
+          // 3. 插入完成后隐藏窗口
+        } else if (currentState === 'processing') {
+          // 🟡 正在处理中,忽略重复的停止事件
+          console.log('[RecordingFloat] 🟡 Direct mode: already processing, ignoring duplicate stop event');
         } else {
-          console.log('[RecordingFloat] Direct mode: state is not recording, hiding window');
+          // idle 或 error 状态 - 可能是异常情况,隐藏窗口
+          console.log('[RecordingFloat] 🟠 Direct mode: unexpected state, hiding window');
           const window = getCurrentWindow();
           await window.hide();
           clearText();
