@@ -4,6 +4,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { useRecordingStore } from '../../stores';
+import { useSettingsStore } from '../../stores';
 
 export const RecordingFloat = () => {
   console.log('[RecordingFloat] 🎬 Component function called');
@@ -12,14 +13,19 @@ export const RecordingFloat = () => {
   const transcribedText = useRecordingStore((state) => state.transcribedText);
   const audioLevel = useRecordingStore((state) => state.audioLevel);
 
-  console.log('[RecordingFloat] 📊 Current state:', { status, transcribedText, audioLevel });
-  console.log('[RecordingFloat] 🔍 Status type:', typeof status, 'Value:', status);
+  // 直接从设置中读取操作模式，而不是从 recordingStore
+  const settings = useSettingsStore((state) => state.settings);
+  const operationMode = settings.operationMode || 'preview';
+
+  console.log('[RecordingFloat] 📊 Current state:', { status, transcribedText: transcribedText?.substring(0, 50), audioLevel, operationMode });
+  console.log('[RecordingFloat] 🎯 Operation mode:', operationMode);
 
   const startRecording = useRecordingStore((state) => state.startRecording);
   const stopRecording = useRecordingStore((state) => state.stopRecording);
   const clearText = useRecordingStore((state) => state.clearText);
   const copyText = useRecordingStore((state) => state.copyText);
   const insertText = useRecordingStore((state) => state.insertText);
+  const setOperationMode = useRecordingStore((state) => state.setOperationMode);
 
   const [showCopiedFeedback, setShowCopiedFeedback] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -27,41 +33,20 @@ export const RecordingFloat = () => {
   // Auto-resize window based on content size
   const resizeWindow = async () => {
     try {
-      let width = 350;
-      let height = 120;
+      let width;
+      let height;
 
-      // Adjust based on state
-      if (status === 'idle' && transcribedText) {
-        // Result display state - generous sizing to ensure everything fits
-        const textLength = transcribedText.length;
-
-        // Width: ensure enough space for min-w-[400px] content + padding + outer margin
-        // CSS has min-w-[400px], plus px-5 (40px total padding), plus p-4 outer (32px total)
-        width = 1000; // Increased base width to ensure content fits
-
-        // For longer text, increase width up to max
-        if (textLength > 20) {
-          width = Math.min(950, 600 + textLength * 3);
-        }
-
-        // Height: text row + button row + all padding
-        // - Outer p-4: 32px
-        // - Text row py-3: 24px (12px top + 12px bottom)
-        // - Text content max-h-[60px]: 60px
-        // - Button row py-3 + pb-3: 24px
-        // - Button height: 36px
-        // Total: 32 + 24 + 60 + 24 + 36 = 176px, add buffer
-        const estimatedLines = Math.ceil(textLength / 50);
-        const textExtraHeight = Math.min(estimatedLines * 15, 40);
-        height = 180 + textExtraHeight;
+      // 预览模式：使用大窗口
+      if (operationMode === 'preview') {
+        width = 900;
+        height = 200;
       } else {
-        // Recording/Processing/Idle state - small capsule
-        // CSS has w-[280px] h-[50px], need to add outer space
-        width = 350;  // 280 + 70 buffer
-        height = 120; // 50 + 70 buffer
+        // 直接插入模式：使用较窄的窗口
+        width = 400;
+        height = 120;
       }
 
-      console.log('[RecordingFloat] Resizing window to:', width, 'x', height, 'Status:', status, 'Has text:', !!transcribedText);
+      console.log('[RecordingFloat] Resizing window to:', width, 'x', height, 'Status:', status, 'Mode:', operationMode, 'Has text:', !!transcribedText);
 
       await invoke('resize_recording_float', {
         width,
@@ -82,15 +67,64 @@ export const RecordingFloat = () => {
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [status, transcribedText]); // Resize when status or text changes
+  }, [status, transcribedText, operationMode]); // Resize when status, text or mode changes
+
+  // 同步操作模式到 recordingStore（用于 stopRecording 逻辑）
+  useEffect(() => {
+    if (settings.operationMode) {
+      setOperationMode(settings.operationMode);
+      console.log('[RecordingFloat] ✅ Operation mode synced to recordingStore:', settings.operationMode);
+    }
+  }, [settings.operationMode, setOperationMode]);
+
+  // 监听设置更新事件，实现跨窗口同步
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+
+    const setupListener = async () => {
+      console.log('[RecordingFloat] Setting up settings-updated listener...');
+      unlisten = await listen('settings-updated', (event: any) => {
+        console.log('[RecordingFloat] 🔄 Received settings-updated event:', event.payload);
+
+        // 当操作模式或模型变化时，重新加载设置
+        if (event.payload.key === 'operationMode') {
+          console.log('[RecordingFloat] Operation mode changed, reloading window...');
+          window.location.reload();
+        } else if (event.payload.key === 'model') {
+          console.log('[RecordingFloat] Model changed to:', event.payload.value);
+          // 更新本地 settingsStore
+          const { loadSettings } = useSettingsStore.getState();
+          loadSettings().catch((error) => {
+            console.error('[RecordingFloat] Failed to reload settings:', error);
+          });
+        }
+      });
+    };
+
+    setupListener().catch((error) => {
+      console.error('[RecordingFloat] Failed to setup settings-updated listener:', error);
+    });
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, []);
+
+  // 🚀 CRITICAL FIX: Use global flag to prevent duplicate notifications across component remounts
+  // React StrictMode will cause component to mount/unmount/mount, so we need a flag outside component scope
+  const initializedRef = useRef(false);
 
   useEffect(() => {
-    console.log('[RecordingFloat] 🚀 Mount useEffect running');
-    console.log('[RecordingFloat] 🪟 Window location:', window.location.href);
-    console.log('[RecordingFloat] 📄 Document title:', document.title);
+    // Prevent duplicate initialization in React StrictMode
+    // NOTE: In React 18 StrictMode, components mount twice in development
+    // This only prevents double-mounting, NOT window re-use issues
+    if (initializedRef.current) {
+      console.log('[RecordingFloat] ⚠️ Already initialized, skipping duplicate setup');
+      return;
+    }
+    initializedRef.current = true;
 
-    // Alert to make sure we can see it even if console is not working
-    console.error('🔴 RecordingFloat MOUNTED - THIS SHOULD APPEAR IN CONSOLE!');
+    console.log('[RecordingFloat] 🚀 Mount useEffect running');
 
     // Set transparent background for the window
     document.documentElement.style.backgroundColor = 'transparent';
@@ -101,39 +135,76 @@ export const RecordingFloat = () => {
     document.body.style.padding = '0';
 
     console.log('[RecordingFloat] ✅ Component mounted and styles applied');
-  }, []);
 
-  useEffect(() => {
-    console.log('[RecordingFloat] Setting up event listeners');
+    // Register event listeners
     let unlistenStart: (() => void) | null = null;
     let unlistenStop: (() => void) | null = null;
 
-    const setupListeners = async () => {
-      console.log('[RecordingFloat] Registering event listeners...');
-
-      unlistenStart = await listen('shortcut-start-recording', () => {
-        console.log('[RecordingFloat] Received shortcut-start-recording event');
-        startRecording();
-      });
-
-      unlistenStop = await listen('shortcut-stop-recording', () => {
-        console.log('[RecordingFloat] Received shortcut-stop-recording event');
-        stopRecording();
-      });
-
-      console.log('[RecordingFloat] Event listeners registered');
+    const notifyBackendReady = async () => {
+      console.log('[RecordingFloat] 📤 Notifying backend window is ready...');
+      try {
+        await invoke('recording_window_ready');
+        console.log('[RecordingFloat] ✅ Backend notified successfully');
+      } catch (error) {
+        console.error('[RecordingFloat] ❌ Failed to notify backend:', error);
+      }
     };
 
-    setupListeners().catch((error) => {
-      console.error('[RecordingFloat] Failed to setup event listeners:', error);
+    const startHandler = async () => {
+      console.log('🔥 [RecordingFloat] START event received from shortcut');
+      console.log('🔥 [RecordingFloat] Backend has already started recording, just updating UI...');
+      try {
+        // 🚀 CRITICAL FIX: 传递 skipBackendCall=true
+        // 因为后端已经在快捷键处理函数中启动了录音
+        // 这里只需要更新前端UI状态和启动计时器
+        await startRecording(true);
+      } catch (error) {
+        console.error('[RecordingFloat] ❌ startRecording failed:', error);
+        // 如果录音启动失败（比如权限被拒绝），隐藏悬浮窗
+        const window = getCurrentWindow();
+        await window.hide();
+      }
+    };
+
+    const stopHandler = async () => {
+      console.log('⏹️  [RecordingFloat] STOP event received');
+      const settings = useSettingsStore.getState().settings;
+      const mode = settings.operationMode || 'preview';
+      const currentState = useRecordingStore.getState().state;
+
+      if (mode === 'preview') {
+        clearText();
+      } else {
+        if (currentState === 'recording' || currentState === 'error') {
+          await stopRecording();
+        } else {
+          const window = getCurrentWindow();
+          await window.hide();
+          clearText();
+        }
+      }
+    };
+
+    // Setup listeners and notify backend
+    const setup = async () => {
+      unlistenStart = await listen('shortcut-start-recording', startHandler);
+      unlistenStop = await listen('shortcut-stop-recording', stopHandler);
+      console.log('[RecordingFloat] ✅ Listeners registered');
+      await notifyBackendReady();
+    };
+
+    setup().catch((error) => {
+      console.error('[RecordingFloat] ❌ Setup failed:', error);
     });
 
     return () => {
-      console.log('[RecordingFloat] Cleaning up event listeners');
+      console.log('[RecordingFloat] Cleaning up');
       if (unlistenStart) unlistenStart();
       if (unlistenStop) unlistenStop();
+      // Reset initialized flag on real unmount
+      initializedRef.current = false;
     };
-  }, [startRecording, stopRecording]);
+  }, []);
 
   // Handle Esc key to close window
   useEffect(() => {
@@ -150,8 +221,16 @@ export const RecordingFloat = () => {
   const handleClose = async () => {
     console.log('[RecordingFloat] Closing window');
     const window = getCurrentWindow();
-    await window.hide();
-    clearText();
+
+    // 预览模式：直接隐藏窗口并清空文本
+    if (operationMode === 'preview') {
+      await window.hide();
+      clearText();
+    } else {
+      // 直接插入模式：隐藏窗口并清空文本
+      await window.hide();
+      clearText();
+    }
   };
 
   const handleCopy = async () => {
@@ -161,89 +240,52 @@ export const RecordingFloat = () => {
   };
 
   const handleInsert = async () => {
+    // 关闭窗口并插入文本（应用激活由后端处理）
+    const window = getCurrentWindow();
+    await window.hide();
+    clearText();
+
+    // 插入文本（后端会自动激活原应用）
     await insertText();
-    // Close window after insert
-    await handleClose();
   };
 
-  console.log('[RecordingFloat] 🎯 Rendering decision:', { status, hasText: !!transcribedText });
+  console.log('[RecordingFloat] 🎯 Rendering decision:', { status, hasText: !!transcribedText, operationMode });
 
-  // Recording/Processing state UI (280x50)
-  if (status === 'recording' || status === 'processing') {
-    console.log('[RecordingFloat] 🎨 Rendering recording UI');
+  // 预览模式：始终显示录制状态，实时转录
+  if (operationMode === 'preview') {
+    console.log('[RecordingFloat] 🎨 Rendering preview mode UI');
     return (
       <div className="fixed inset-0 flex items-center justify-center">
         <div
           ref={contentRef}
-          className="relative flex items-center gap-3 px-5 py-3
-            w-[280px] h-[50px] rounded-full
-            bg-gray-700/80 backdrop-blur-xl shadow-2xl"
-        >
-          {/* Left: Microphone icon */}
-          <Mic className="w-4 h-4 text-white/90 flex-shrink-0" />
-
-          {/* Center: Waveform animation */}
-          <div className="flex-1 flex items-center justify-center gap-[3px] h-6">
-            {status === 'recording' ? (
-              // Animated waveform bars - 6 thin bars
-              <>
-                {[...Array(6)].map((_, i) => (
-                  <div
-                    key={i}
-                    className="w-[3px] bg-white/70 rounded-full animate-pulse"
-                    style={{
-                      height: `${12 + Math.random() * 10}px`,
-                      animationDelay: `${i * 0.1}s`,
-                      animationDuration: '0.8s',
-                    }}
-                  />
-                ))}
-              </>
-            ) : (
-              // Processing state
-              <div className="flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 bg-white/70 rounded-full animate-bounce" style={{ animationDelay: '0s' }} />
-                <div className="w-1.5 h-1.5 bg-white/70 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
-                <div className="w-1.5 h-1.5 bg-white/70 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-              </div>
-            )}
-          </div>
-
-          {/* Right: Close button */}
-          <button
-            onClick={handleClose}
-            className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-600/60 hover:bg-gray-600/80
-              flex items-center justify-center transition-colors"
-          >
-            <X className="w-3 h-3 text-white/90" />
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Result display state - horizontal capsule with text and buttons
-  if (status === 'idle' && transcribedText) {
-    return (
-      <div className="fixed inset-0 flex items-center justify-center p-4">
-        <div
-          ref={contentRef}
           className="relative flex flex-col
-            min-w-[400px] max-w-[950px] w-full
+            w-[880px]
             rounded-2xl
             bg-gray-700/85 backdrop-blur-xl shadow-2xl
             overflow-hidden"
         >
           {/* Top row: Icon + Text + Close button */}
           <div className="flex items-center gap-4 px-6 py-3.5">
-            {/* Left: Microphone icon */}
-            <Mic className="w-4 h-4 text-white/90 flex-shrink-0" />
+            {/* Left: Microphone icon - always recording (red pulsing) */}
+            <div className="relative flex-shrink-0">
+              <Mic className="w-4 h-4 text-red-500 animate-pulse transition-colors" />
+              {/* Recording indicator - pulsing ring */}
+              <span className="absolute inset-0 flex items-center justify-center">
+                <span className="absolute w-6 h-6 bg-red-500/30 rounded-full animate-ping"></span>
+              </span>
+            </div>
 
-            {/* Center: Text (scrollable if long) */}
-            <div className="flex-1 max-h-[60px] overflow-y-auto">
-              <p className="text-white text-sm leading-relaxed whitespace-pre-wrap">
-                {transcribedText}
-              </p>
+            {/* Center: Text content area - shows real-time transcription */}
+            <div className="flex-1 min-h-[24px] max-h-[60px] overflow-y-auto">
+              {transcribedText ? (
+                <p className="text-white text-sm leading-relaxed whitespace-pre-wrap">
+                  {transcribedText}
+                </p>
+              ) : (
+                <p className="text-white/40 text-sm italic leading-relaxed">
+                  正在录制...
+                </p>
+              )}
             </div>
 
             {/* Right: Close button */}
@@ -256,30 +298,36 @@ export const RecordingFloat = () => {
             </button>
           </div>
 
-          {/* Bottom row: Action buttons */}
+          {/* Bottom row: Action buttons - always show in preview mode */}
           <div className="flex items-center justify-end gap-2 px-6 pb-3 pt-1">
             {/* Clear button */}
             <button
               onClick={clearText}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md
-                bg-white/5 hover:bg-white/10 border border-white/10
-                transition-all group"
+              disabled={!transcribedText}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md
+                border border-white/10 transition-all group
+                ${transcribedText
+                  ? 'bg-white/5 hover:bg-white/10'
+                  : 'bg-white/5 opacity-50 cursor-not-allowed'}`}
               title="清空"
             >
-              <Trash2 className="w-3 h-3 text-white/70 group-hover:text-white transition-colors" />
-              <span className="text-white/80 text-xs group-hover:text-white">清空</span>
+              <Trash2 className={`w-3 h-3 transition-colors ${transcribedText ? 'text-white/70 group-hover:text-white' : 'text-white/40'}`} />
+              <span className={`text-xs ${transcribedText ? 'text-white/80 group-hover:text-white' : 'text-white/40'}`}>清空</span>
             </button>
 
             {/* Copy button */}
             <button
               onClick={handleCopy}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md
-                bg-white/5 hover:bg-white/10 border border-white/10
-                transition-all group relative"
+              disabled={!transcribedText}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md
+                border border-white/10 transition-all group relative
+                ${transcribedText
+                  ? 'bg-white/5 hover:bg-white/10'
+                  : 'bg-white/5 opacity-50 cursor-not-allowed'}`}
               title="复制"
             >
-              <Copy className="w-3 h-3 text-white/70 group-hover:text-white transition-colors" />
-              <span className="text-white/80 text-xs group-hover:text-white">复制</span>
+              <Copy className={`w-3 h-3 transition-colors ${transcribedText ? 'text-white/70 group-hover:text-white' : 'text-white/40'}`} />
+              <span className={`text-xs ${transcribedText ? 'text-white/80 group-hover:text-white' : 'text-white/40'}`}>复制</span>
               {showCopiedFeedback && (
                 <span className="absolute -top-8 left-1/2 -translate-x-1/2
                   px-2 py-1 rounded-md bg-green-500 text-white text-xs whitespace-nowrap shadow-lg">
@@ -291,13 +339,16 @@ export const RecordingFloat = () => {
             {/* Insert button */}
             <button
               onClick={handleInsert}
-              className="flex items-center gap-1.5 px-3 py-1 rounded-md
-                bg-blue-600/80 hover:bg-blue-600 border border-blue-500/50
-                transition-all group"
+              disabled={!transcribedText}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-md
+                border transition-all group
+                ${transcribedText
+                  ? 'bg-blue-600/80 hover:bg-blue-600 border-blue-500/50'
+                  : 'bg-blue-600/30 border-blue-500/20 opacity-50 cursor-not-allowed'}`}
               title="插入"
             >
-              <span className="text-white text-xs font-medium">插入</span>
-              <CornerDownLeft className="w-3 h-3 text-white" />
+              <span className={`text-xs font-medium ${transcribedText ? 'text-white' : 'text-white/40'}`}>插入</span>
+              <CornerDownLeft className={`w-3 h-3 ${transcribedText ? 'text-white' : 'text-white/40'}`} />
             </button>
           </div>
         </div>
@@ -305,34 +356,68 @@ export const RecordingFloat = () => {
     );
   }
 
-  // Default state: show idle recording UI
-  // This handles the brief moment when window is shown but recording hasn't started yet
-  console.log('[RecordingFloat] ⚠️  Idle state without text - rendering idle recording UI');
-  return (
-    <div className="fixed inset-0 flex items-center justify-center">
-      <div
-        ref={contentRef}
-        className="relative flex items-center gap-3 px-5 py-3
-          w-[280px] h-[50px] rounded-full
-          bg-gray-700/80 backdrop-blur-xl shadow-2xl"
-      >
-        {/* Left: Microphone icon */}
-        <Mic className="w-4 h-4 text-white/60 flex-shrink-0" />
-
-        {/* Center: Ready state indicator */}
-        <div className="flex-1 flex items-center justify-center">
-          <span className="text-white/60 text-xs">准备就绪</span>
-        </div>
-
-        {/* Right: Close button */}
-        <button
-          onClick={handleClose}
-          className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-600/60 hover:bg-gray-600/80
-            flex items-center justify-center transition-colors"
+  // 直接插入模式：始终显示录制/转录UI（没有"准备就绪"状态）
+  if (operationMode === 'direct') {
+    console.log('[RecordingFloat] 🎨 Rendering direct mode UI, status:', status);
+    return (
+      <div className="fixed inset-0 flex items-center justify-center">
+        <div
+          ref={contentRef}
+          className="relative flex flex-col
+            w-[380px]
+            rounded-2xl
+            bg-gray-700/85 backdrop-blur-xl shadow-2xl
+            overflow-hidden"
         >
-          <X className="w-3 h-3 text-white/90" />
-        </button>
+          {/* Top row: Icon + Status + Close button */}
+          <div className="flex items-center gap-4 px-6 py-3.5">
+            {/* Left: Microphone icon with status animation */}
+            <div className="relative flex-shrink-0">
+              <Mic
+                className={`w-4 h-4 transition-colors ${
+                  status === 'recording'
+                    ? 'text-red-500 animate-pulse'
+                    : status === 'processing'
+                    ? 'text-blue-500 animate-pulse'
+                    : 'text-red-500 animate-pulse'
+                }`}
+              />
+              {/* Recording indicator - pulsing ring */}
+              {(status === 'recording' || status === 'idle') && (
+                <span className="absolute inset-0 flex items-center justify-center">
+                  <span className="absolute w-6 h-6 bg-red-500/30 rounded-full animate-ping"></span>
+                </span>
+              )}
+              {/* Processing indicator - spinning ring */}
+              {status === 'processing' && (
+                <span className="absolute inset-0 flex items-center justify-center">
+                  <span className="absolute w-6 h-6 border-2 border-blue-500/50 border-t-blue-500 rounded-full animate-spin"></span>
+                </span>
+              )}
+            </div>
+
+            {/* Center: Status text */}
+            <div className="flex-1">
+              <p className="text-white/70 text-sm">
+                {status === 'processing' ? '正在转录...' : '正在录制...'}
+              </p>
+            </div>
+
+            {/* Right: Close button */}
+            <button
+              onClick={handleClose}
+              className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-600/60 hover:bg-gray-600/80
+                flex items-center justify-center transition-colors"
+            >
+              <X className="w-3 h-3 text-white/90" />
+            </button>
+          </div>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
+
+  // 预览模式的默认状态不应该出现
+  console.log('[RecordingFloat] ⚠️  Unexpected state - should not reach here');
+  return null;
 };
