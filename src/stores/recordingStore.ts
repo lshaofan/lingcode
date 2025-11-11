@@ -219,28 +219,45 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
         },
       })
 
-      set({
-        state: 'idle',
-        transcription: transcriptionText,
-        transcribedText: transcriptionText,
-        duration: 0,
-        audioLevel: 0,
-      })
-
       // 根据操作模式决定后续行为（直接从 settingsStore 读取，确保同步）
       const mode = settings.operationMode || 'preview'
       console.log('[RecordingStore] Operation mode from settings:', mode)
+
       if (mode === 'direct') {
-        // 直接插入模式：隐藏窗口并自动插入
-        // 注意：应用激活由后端处理，不需要额外等待
+        // 直接插入模式：转录完成后保持 processing 状态，显示"正在插入..."
+        console.log('[RecordingStore] Direct mode: keeping processing state for text insertion')
+        set({
+          state: 'processing', // 保持 processing 状态
+          transcription: transcriptionText,
+          transcribedText: '正在插入文本...', // 显示插入中的提示
+          duration: 0,
+          audioLevel: 0,
+        })
+
+        // 插入文本（后端会自动激活原应用）
+        console.log('[RecordingStore] Inserting text...')
+        await get().insertText()
+        console.log('[RecordingStore] ✅ Text inserted successfully')
+
+        // 插入完成后隐藏窗口
         const window = getCurrentWindow()
         await window.hide()
 
-        // 插入文本（后端会自动激活原应用）
-        await get().insertText()
-        set({ transcribedText: '' })
+        // 重置状态
+        set({
+          state: 'idle',
+          transcribedText: '',
+        })
+      } else {
+        // 预览模式：设置为 idle 状态，保持窗口显示，等待用户操作
+        set({
+          state: 'idle',
+          transcription: transcriptionText,
+          transcribedText: transcriptionText,
+          duration: 0,
+          audioLevel: 0,
+        })
       }
-      // 预览模式：保持窗口显示，等待用户操作
     } catch (error) {
       console.error('[RecordingStore] Transcription error:', error)
 

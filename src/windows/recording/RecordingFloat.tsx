@@ -266,18 +266,38 @@ export const RecordingFloat = () => {
         >
           {/* Top row: Icon + Text + Close button */}
           <div className="flex items-center gap-4 px-6 py-3.5">
-            {/* Left: Microphone icon - always recording (red pulsing) */}
+            {/* Left: Microphone icon - status-aware */}
             <div className="relative flex-shrink-0">
-              <Mic className="w-4 h-4 text-red-500 animate-pulse transition-colors" />
+              <Mic
+                className={`w-4 h-4 transition-colors ${
+                  status === 'recording'
+                    ? 'text-red-500 animate-pulse'
+                    : status === 'processing'
+                    ? 'text-blue-500 animate-pulse'
+                    : 'text-red-500 animate-pulse'
+                }`}
+              />
               {/* Recording indicator - pulsing ring */}
-              <span className="absolute inset-0 flex items-center justify-center">
-                <span className="absolute w-6 h-6 bg-red-500/30 rounded-full animate-ping"></span>
-              </span>
+              {status === 'recording' && (
+                <span className="absolute inset-0 flex items-center justify-center">
+                  <span className="absolute w-6 h-6 bg-red-500/30 rounded-full animate-ping"></span>
+                </span>
+              )}
+              {/* Processing indicator - spinning ring */}
+              {status === 'processing' && (
+                <span className="absolute inset-0 flex items-center justify-center">
+                  <span className="absolute w-6 h-6 border-2 border-blue-500/50 border-t-blue-500 rounded-full animate-spin"></span>
+                </span>
+              )}
             </div>
 
-            {/* Center: Text content area - shows real-time transcription */}
+            {/* Center: Text content area - shows real-time transcription or processing status */}
             <div className="flex-1 min-h-[24px] max-h-[60px] overflow-y-auto">
-              {transcribedText ? (
+              {status === 'processing' ? (
+                <p className="text-blue-400 text-sm italic leading-relaxed animate-pulse">
+                  正在转录...
+                </p>
+              ) : transcribedText ? (
                 <p className="text-white text-sm leading-relaxed whitespace-pre-wrap">
                   {transcribedText}
                 </p>
@@ -298,36 +318,36 @@ export const RecordingFloat = () => {
             </button>
           </div>
 
-          {/* Bottom row: Action buttons - always show in preview mode */}
+          {/* Bottom row: Action buttons - disabled during processing */}
           <div className="flex items-center justify-end gap-2 px-6 pb-3 pt-1">
             {/* Clear button */}
             <button
               onClick={clearText}
-              disabled={!transcribedText}
+              disabled={!transcribedText || status === 'processing'}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md
                 border border-white/10 transition-all group
-                ${transcribedText
+                ${transcribedText && status !== 'processing'
                   ? 'bg-white/5 hover:bg-white/10'
                   : 'bg-white/5 opacity-50 cursor-not-allowed'}`}
               title="清空"
             >
-              <Trash2 className={`w-3 h-3 transition-colors ${transcribedText ? 'text-white/70 group-hover:text-white' : 'text-white/40'}`} />
-              <span className={`text-xs ${transcribedText ? 'text-white/80 group-hover:text-white' : 'text-white/40'}`}>清空</span>
+              <Trash2 className={`w-3 h-3 transition-colors ${transcribedText && status !== 'processing' ? 'text-white/70 group-hover:text-white' : 'text-white/40'}`} />
+              <span className={`text-xs ${transcribedText && status !== 'processing' ? 'text-white/80 group-hover:text-white' : 'text-white/40'}`}>清空</span>
             </button>
 
             {/* Copy button */}
             <button
               onClick={handleCopy}
-              disabled={!transcribedText}
+              disabled={!transcribedText || status === 'processing'}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md
                 border border-white/10 transition-all group relative
-                ${transcribedText
+                ${transcribedText && status !== 'processing'
                   ? 'bg-white/5 hover:bg-white/10'
                   : 'bg-white/5 opacity-50 cursor-not-allowed'}`}
               title="复制"
             >
-              <Copy className={`w-3 h-3 transition-colors ${transcribedText ? 'text-white/70 group-hover:text-white' : 'text-white/40'}`} />
-              <span className={`text-xs ${transcribedText ? 'text-white/80 group-hover:text-white' : 'text-white/40'}`}>复制</span>
+              <Copy className={`w-3 h-3 transition-colors ${transcribedText && status !== 'processing' ? 'text-white/70 group-hover:text-white' : 'text-white/40'}`} />
+              <span className={`text-xs ${transcribedText && status !== 'processing' ? 'text-white/80 group-hover:text-white' : 'text-white/40'}`}>复制</span>
               {showCopiedFeedback && (
                 <span className="absolute -top-8 left-1/2 -translate-x-1/2
                   px-2 py-1 rounded-md bg-green-500 text-white text-xs whitespace-nowrap shadow-lg">
@@ -339,16 +359,16 @@ export const RecordingFloat = () => {
             {/* Insert button */}
             <button
               onClick={handleInsert}
-              disabled={!transcribedText}
+              disabled={!transcribedText || status === 'processing'}
               className={`flex items-center gap-1.5 px-3 py-1 rounded-md
                 border transition-all group
-                ${transcribedText
+                ${transcribedText && status !== 'processing'
                   ? 'bg-blue-600/80 hover:bg-blue-600 border-blue-500/50'
                   : 'bg-blue-600/30 border-blue-500/20 opacity-50 cursor-not-allowed'}`}
               title="插入"
             >
-              <span className={`text-xs font-medium ${transcribedText ? 'text-white' : 'text-white/40'}`}>插入</span>
-              <CornerDownLeft className={`w-3 h-3 ${transcribedText ? 'text-white' : 'text-white/40'}`} />
+              <span className={`text-xs font-medium ${transcribedText && status !== 'processing' ? 'text-white' : 'text-white/40'}`}>插入</span>
+              <CornerDownLeft className={`w-3 h-3 ${transcribedText && status !== 'processing' ? 'text-white' : 'text-white/40'}`} />
             </button>
           </div>
         </div>
