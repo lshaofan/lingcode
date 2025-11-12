@@ -1,60 +1,61 @@
-import React, { useEffect } from 'react';
-import { useUIStore } from '../../stores';
-import { GeneralSettings } from './settings/GeneralSettings';
-import { SystemSettings } from './settings/SystemSettings';
-import { ModelSettings } from './settings/ModelSettings';
+import React, { useEffect } from 'react'
+import { useUIStore } from '../../stores'
+import { GeneralSettings } from './settings/GeneralSettings'
+import { SystemSettings } from './settings/SystemSettings'
+import { ModelSettings } from './settings/ModelSettings'
+import { EnvironmentSettings } from './settings/EnvironmentSettings'
 
-type SettingsTab = 'general' | 'system' | 'model';
+type SettingsTab = 'general' | 'system' | 'model' | 'environment'
 
 interface TabItem {
-  id: SettingsTab;
-  icon: string;
-  label: string;
+  id: SettingsTab
+  icon: string
+  label: string
 }
 
 const tabs: TabItem[] = [
+  { id: 'environment', icon: '🔍', label: '环境检测' },
   { id: 'general', icon: '⚙️', label: '通用设置' },
   { id: 'system', icon: '💻', label: '系统设置' },
   { id: 'model', icon: '🤖', label: '模型设置' },
-];
+]
 
 export const SettingsDialog: React.FC = () => {
-  const { isSettingsOpen, closeSettings, settingsTab, setSettingsTab } = useUIStore();
+  const { isSettingsOpen, closeSettings, settingsTab, setSettingsTab } = useUIStore()
 
   // ESC 键关闭
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isSettingsOpen) {
-        closeSettings();
+        closeSettings()
       }
-    };
+    }
 
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
-  }, [isSettingsOpen, closeSettings]);
+    window.addEventListener('keydown', handleEscape)
+    return () => window.removeEventListener('keydown', handleEscape)
+  }, [isSettingsOpen, closeSettings])
 
   const renderContent = () => {
     switch (settingsTab) {
+      case 'environment':
+        return <EnvironmentSettings />
       case 'general':
-        return <GeneralSettings />;
+        return <GeneralSettings />
       case 'system':
-        return <SystemSettings />;
+        return <SystemSettings />
       case 'model':
-        return <ModelSettings />;
+        return <ModelSettings />
       default:
-        return <GeneralSettings />;
+        return <EnvironmentSettings />
     }
-  };
+  }
 
-  if (!isSettingsOpen) return null;
+  if (!isSettingsOpen) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-12">
       {/* 背景遮罩 */}
-      <div
-        className="absolute inset-0 bg-black bg-opacity-50"
-        onClick={closeSettings}
-      />
+      <div className="absolute inset-0 bg-black bg-opacity-50" onClick={closeSettings} />
 
       {/* 弹窗主体 - 使用 max-w/max-h 让其自动适应窗口大小，同时留出边距 */}
       <div className="relative w-full h-full max-w-[850px] max-h-[650px] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden">
@@ -67,7 +68,12 @@ export const SettingsDialog: React.FC = () => {
             aria-label="关闭设置"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
@@ -77,7 +83,7 @@ export const SettingsDialog: React.FC = () => {
           {/* 左侧导航 */}
           <nav className="w-52 bg-gray-50 border-r border-gray-200 p-4 space-y-1">
             {tabs.map((tab) => {
-              const isActive = tab.id === settingsTab;
+              const isActive = tab.id === settingsTab
               return (
                 <button
                   key={tab.id}
@@ -95,14 +101,12 @@ export const SettingsDialog: React.FC = () => {
                   <span className="text-xl">{tab.icon}</span>
                   <span className="font-medium">{tab.label}</span>
                 </button>
-              );
+              )
             })}
           </nav>
 
           {/* 右侧内容 */}
-          <div className="flex-1 overflow-y-auto p-6">
-            {renderContent()}
-          </div>
+          <div className="flex-1 overflow-y-auto p-6">{renderContent()}</div>
         </div>
 
         {/* 底部栏 */}
@@ -111,5 +115,5 @@ export const SettingsDialog: React.FC = () => {
         </div>
       </div>
     </div>
-  );
-};
+  )
+}

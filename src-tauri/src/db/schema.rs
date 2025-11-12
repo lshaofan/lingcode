@@ -73,7 +73,11 @@ fn create_initial_schema(conn: &Connection) -> Result<()> {
         "INSERT OR IGNORE INTO settings (key, value) VALUES
          ('language', 'zh'),
          ('model', 'base'),
-         ('shortcut', 'Cmd+Shift+S')",
+         ('shortcut', 'Cmd+Shift+S'),
+         ('model_type', 'whisper'),
+         ('model_name', 'small'),
+         ('is_first_launch', 'true'),
+         ('enable_prewarming', 'true')",
         [],
     )?;
 

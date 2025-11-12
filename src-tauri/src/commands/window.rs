@@ -3,8 +3,23 @@ use tauri::{AppHandle, Manager, Runtime};
 #[tauri::command]
 pub fn show_recording_float<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("recording-float") {
-        window.show().map_err(|e| e.to_string())?;
-        window.set_focus().map_err(|e| e.to_string())?;
+        // 使用 macOS 原生 API 显示窗口而不激活
+        #[cfg(target_os = "macos")]
+        {
+            use cocoa::appkit::NSWindow;
+            use cocoa::base::id;
+            use objc::{msg_send, sel, sel_impl};
+
+            let ns_window = window.ns_window().map_err(|e| e.to_string())? as id;
+            unsafe {
+                let _: () = msg_send![ns_window, orderFrontRegardless];
+            }
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            window.show().map_err(|e| e.to_string())?;
+        }
     }
     Ok(())
 }
@@ -30,9 +45,24 @@ pub fn toggle_recording_float<R: Runtime>(app: AppHandle<R>) -> Result<(), Strin
             println!("隐藏窗口");
             window.hide().map_err(|e| e.to_string())?;
         } else {
-            println!("显示窗口");
-            window.show().map_err(|e| e.to_string())?;
-            window.set_focus().map_err(|e| e.to_string())?;
+            println!("显示窗口，不抢夺焦点");
+            // 使用 macOS 原生 API 显示窗口而不激活
+            #[cfg(target_os = "macos")]
+            {
+                use cocoa::appkit::NSWindow;
+                use cocoa::base::id;
+                use objc::{msg_send, sel, sel_impl};
+
+                let ns_window = window.ns_window().map_err(|e| e.to_string())? as id;
+                unsafe {
+                    let _: () = msg_send![ns_window, orderFrontRegardless];
+                }
+            }
+
+            #[cfg(not(target_os = "macos"))]
+            {
+                window.show().map_err(|e| e.to_string())?;
+            }
         }
     } else {
         println!("警告: 未找到 recording-float 窗口!");

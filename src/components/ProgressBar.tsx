@@ -1,11 +1,11 @@
-import React from 'react';
+import React from 'react'
 
 interface ProgressBarProps {
-  progress: number; // 0-100
-  label?: string;
-  showPercentage?: boolean;
-  className?: string;
-  size?: 'sm' | 'md' | 'lg';
+  progress: number // 0-100
+  label?: string
+  showPercentage?: boolean
+  className?: string
+  size?: 'sm' | 'md' | 'lg'
 }
 
 export const ProgressBar: React.FC<ProgressBarProps> = ({
@@ -15,13 +15,13 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   className = '',
   size = 'md',
 }) => {
-  const clampedProgress = Math.max(0, Math.min(100, progress));
+  const clampedProgress = Math.max(0, Math.min(100, progress))
 
   const heightClasses = {
     sm: 'h-1',
     md: 'h-2',
     lg: 'h-3',
-  };
+  }
 
   return (
     <div className={`w-full ${className}`}>
@@ -29,7 +29,9 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
         <div className="flex justify-between items-center mb-1">
           {label && <span className="text-sm text-gray-700">{label}</span>}
           {showPercentage && (
-            <span className="text-sm font-medium text-gray-900">{Math.round(clampedProgress)}%</span>
+            <span className="text-sm font-medium text-gray-900">
+              {Math.round(clampedProgress)}%
+            </span>
           )}
         </div>
       )}
@@ -40,5 +42,5 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
         />
       </div>
     </div>
-  );
-};
+  )
+}

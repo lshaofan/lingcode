@@ -30,10 +30,15 @@ def transcribe_audio(
     Returns:
         转录结果字典
     """
+    # 设置缓存目录环境变量（确保 FunASR/ModelScope 使用正确的缓存路径）
+    cache_root = os.path.expanduser(os.environ.get("MODELSCOPE_CACHE", "~/.cache/modelscope"))
+    os.environ["MODELSCOPE_CACHE"] = cache_root
+
     # 调试：打印 Python 环境信息
     print(f"🐍 Python executable: {sys.executable}", file=sys.stderr)
     print(f"🐍 Python version: {sys.version}", file=sys.stderr)
     print(f"🐍 Python path: {sys.path[:3]}", file=sys.stderr)
+    print(f"📁 MODELSCOPE_CACHE: {cache_root}", file=sys.stderr)
 
     try:
         from funasr import AutoModel
@@ -72,6 +77,9 @@ def transcribe_audio(
                 "error": f"Unknown model: {model_name}",
             }
 
+        # 获取缓存目录（与 download 函数保持一致）
+        cache_root = os.path.expanduser(os.environ.get("MODELSCOPE_CACHE", "~/.cache/modelscope"))
+
         # 初始化模型
         model_kwargs = {
             "model": config["model"],
@@ -79,6 +87,8 @@ def transcribe_audio(
             "disable_pbar": False,
             "disable_update": True,  # 🚀 关键优化：禁用自动更新检查，避免重复下载
             "hub": "ms",  # 使用 ModelScope hub
+            "model_revision": None,  # 不指定版本，使用最新版本
+            "cache_dir": cache_root,  # 🔑 关键：指定缓存目录，避免重复下载
         }
 
         if config["vad_model"]:
@@ -86,6 +96,9 @@ def transcribe_audio(
 
         if config["punc_model"]:
             model_kwargs["punc_model"] = config["punc_model"]
+
+        print(f"🔧 Model cache_dir: {cache_root}", file=sys.stderr)
+        print(f"🔧 Loading model: {config['model']}", file=sys.stderr)
 
         model = AutoModel(**model_kwargs)
 
@@ -318,13 +331,15 @@ def check_model_exists(
         }
 
     try:
-        # 获取缓存根目录 - ModelScope 默认使用 ~/.cache/modelscope/hub
+        # 获取缓存根目录 - ModelScope 默认使用 ~/.cache/modelscope
         cache_root = os.path.expanduser(os.environ.get("MODELSCOPE_CACHE", "~/.cache/modelscope"))
         if cache_dir:
             cache_root = cache_dir
 
-        # ModelScope 的实际缓存结构是 {cache_root}/hub/models/{org}/{model_name}
-        hub_models_dir = os.path.join(cache_root, "hub", "models")
+        # 当使用 snapshot_download 时，如果指定了 cache_dir，模型直接下载到 {cache_dir}/{org}/{model_name}
+        # 如果没有指定 cache_dir，ModelScope 默认使用 {cache_root}/hub/models/{org}/{model_name}
+        # 但在我们的下载函数中，我们指定了 cache_dir=cache_root，所以路径是 {cache_root}/{org}/{model_name}
+        hub_models_dir = cache_root
 
         # 模型 ID 映射
         model_ids = {
@@ -345,36 +360,48 @@ def check_model_exists(
 
         # 检查主模型
         def check_single_model(model_id_to_check, model_display_name=""):
-            # ModelScope 路径结构: hub/models/{org}/{model_name}
-            # 例如: hub/models/damo/speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-pytorch
+            # ModelScope 有两种可能的路径结构:
+            # 1. 新版本 (指定 cache_dir): {cache_dir}/{org}/{model_name}
+            # 2. 旧版本 (默认路径): {cache_dir}/hub/models/{org}/{model_name}
+            # 我们需要同时检查这两种路径
             org, model_name_part = model_id_to_check.split("/", 1)
-            model_cache_path = os.path.join(hub_models_dir, org, model_name_part)
+
+            # 路径1: 新版本路径 (直接在 cache_root 下)
+            path1 = os.path.join(hub_models_dir, org, model_name_part)
+            # 路径2: 旧版本路径 (在 hub/models 下)
+            path2 = os.path.join(hub_models_dir, "hub", "models", org, model_name_part)
+
             print(f"🔍 检查模型 {model_display_name}:", file=sys.stderr)
-            print(f"   路径: {model_cache_path}", file=sys.stderr)
+            print(f"   路径1 (新): {path1}", file=sys.stderr)
+            print(f"   路径2 (旧): {path2}", file=sys.stderr)
 
-            if not os.path.exists(model_cache_path):
-                print(f"  ❌ 路径不存在", file=sys.stderr)
-                return False
+            # 尝试检查两个路径
+            for path_idx, model_cache_path in enumerate([path1, path2], 1):
+                if not os.path.exists(model_cache_path):
+                    print(f"  路径{path_idx}: ❌ 不存在", file=sys.stderr)
+                    continue
 
-            if not os.path.isdir(model_cache_path):
-                print(f"  ❌ 不是目录", file=sys.stderr)
-                return False
+                if not os.path.isdir(model_cache_path):
+                    print(f"  路径{path_idx}: ❌ 不是目录", file=sys.stderr)
+                    continue
 
-            # 检查是否有实际的模型文件
-            has_files = False
-            file_count = 0
-            for root, dirs, files in os.walk(model_cache_path):
-                if files:
-                    has_files = True
-                    file_count = len(files)
-                    break
+                # 检查是否有实际的模型文件
+                has_files = False
+                file_count = 0
+                for root, dirs, files in os.walk(model_cache_path):
+                    if files:
+                        has_files = True
+                        file_count = len(files)
+                        break
 
-            if not has_files:
-                print(f"  ❌ 目录为空", file=sys.stderr)
-                return False
+                if has_files:
+                    print(f"  路径{path_idx}: ✅ 找到 {file_count} 个文件", file=sys.stderr)
+                    return True
+                else:
+                    print(f"  路径{path_idx}: ❌ 目录为空", file=sys.stderr)
 
-            print(f"  ✅ 找到 {file_count} 个文件", file=sys.stderr)
-            return True
+            print(f"  ❌ 所有路径都未找到有效模型", file=sys.stderr)
+            return False
 
         # 检查主模型
         print(f"📋 开始检查模型: {model_name}", file=sys.stderr)

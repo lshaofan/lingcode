@@ -1,18 +1,19 @@
-import React from 'react';
+import React from 'react'
 
 export interface RadioOption {
-  value: string;
-  label: string;
-  description?: string;
-  disabled?: boolean;
+  value: string
+  label: string
+  description?: string
+  disabled?: boolean
 }
 
 interface RadioGroupProps {
-  name: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: RadioOption[];
-  className?: string;
+  name: string
+  value: string
+  onChange: (value: string) => void
+  options: RadioOption[]
+  className?: string
+  renderAction?: (option: RadioOption) => React.ReactNode
 }
 
 export const RadioGroup: React.FC<RadioGroupProps> = ({
@@ -21,6 +22,7 @@ export const RadioGroup: React.FC<RadioGroupProps> = ({
   onChange,
   options,
   className = '',
+  renderAction,
 }) => {
   return (
     <div className={`space-y-2 ${className}`}>
@@ -28,7 +30,7 @@ export const RadioGroup: React.FC<RadioGroupProps> = ({
         <label
           key={option.value}
           className={`
-            flex items-start p-3 rounded-lg border cursor-pointer
+            flex items-center p-3 rounded-lg border cursor-pointer
             transition-colors duration-200
             ${
               value === option.value
@@ -45,16 +47,19 @@ export const RadioGroup: React.FC<RadioGroupProps> = ({
             checked={value === option.value}
             onChange={(e) => !option.disabled && onChange(e.target.value)}
             disabled={option.disabled}
-            className="mt-1 h-4 w-4 text-green-500 focus:ring-green-500"
+            className="h-4 w-4 text-green-500 focus:ring-green-500"
           />
-          <div className="ml-3 flex-1">
-            <div className="font-medium text-gray-900">{option.label}</div>
-            {option.description && (
-              <div className="text-sm text-gray-500 mt-1">{option.description}</div>
-            )}
+          <div className="ml-3 flex-1 flex items-center justify-between">
+            <div>
+              <div className="font-medium text-gray-900">{option.label}</div>
+              {option.description && (
+                <div className="text-sm text-gray-500 mt-1">{option.description}</div>
+              )}
+            </div>
+            {renderAction && renderAction(option)}
           </div>
         </label>
       ))}
     </div>
-  );
-};
+  )
+}

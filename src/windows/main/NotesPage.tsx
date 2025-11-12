@@ -1,4 +1,4 @@
-import React from 'react';
+import React from 'react'
 
 export const NotesPage: React.FC = () => {
   return (
@@ -9,5 +9,5 @@ export const NotesPage: React.FC = () => {
         <p className="text-sm text-gray-400 mt-2">语音笔记功能即将推出</p>
       </div>
     </div>
-  );
-};
+  )
+}

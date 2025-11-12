@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { emit } from '@tauri-apps/api/event'
 import { useSettingsStore } from '../../../stores'
-import { Toggle } from '../../../components'
+import { Toggle, RadioGroup, type RadioOption } from '../../../components'
 import { useToast } from '../../../components'
 
 export const SystemSettings: React.FC = () => {
@@ -56,9 +57,51 @@ export const SystemSettings: React.FC = () => {
     }
   }
 
+  const handleOperationModeChange = async (value: string) => {
+    const mode = value as 'direct' | 'preview'
+    setLoading(true)
+    try {
+      await updateSetting('operationMode', mode)
+      // 通知其他窗口设置已更新
+      await emit('settings-updated', { key: 'operationMode', value: mode })
+      console.log('[SystemSettings] Emitted settings-updated event for operationMode:', mode)
+      const modeText = mode === 'direct' ? '直接插入模式' : '预览确认模式'
+      toast.success(`已切换到${modeText}`)
+    } catch (error) {
+      toast.error(`切换模式失败: ${String(error)}`)
+      console.error('Failed to change operation mode:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const operationModeOptions: RadioOption[] = [
+    {
+      value: 'direct',
+      label: '直接插入模式',
+      description: '录制完成后自动插入文字到当前应用，适合快速输入场景',
+    },
+    {
+      value: 'preview',
+      label: '预览确认模式（推荐）',
+      description: '录制完成后先预览文字，由您决定是否插入，更加安全可控',
+    },
+  ]
+
   return (
     <div className="space-y-6">
       <h3 className="text-2xl font-semibold text-gray-900">系统设置</h3>
+
+      {/* 操作模式 */}
+      <div>
+        <h4 className="text-sm font-medium text-gray-700 mb-3">操作模式</h4>
+        <RadioGroup
+          name="operationMode"
+          value={settings.operationMode}
+          onChange={(value) => void handleOperationModeChange(value)}
+          options={operationModeOptions.map((opt) => ({ ...opt, disabled: loading }))}
+        />
+      </div>
 
       <div>
         <h4 className="text-sm font-medium text-gray-500 mb-3">App settings</h4>

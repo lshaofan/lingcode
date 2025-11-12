@@ -18,6 +18,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": [
+      "scripts/*.py"
+    ],
     "macOS": {
       "minimumSystemVersion": "10.15",
       "entitlements": "entitlements.plist",

@@ -151,35 +151,9 @@ fn handle_start_recording<R: Runtime>(app_handle: &AppHandle<R>) {
         }
     }
 
-    // 🚀 CRITICAL FIX: 在显示窗口之前先启动录音
-    // 这样可以避免用户在窗口弹出后立即说话时丢失前几秒音频
-    // 注意: 快捷键回调不在 Tokio 运行时中,需要使用同步方式阻塞等待
-    println!("[Shortcut] 🎤 Pre-starting audio recording BEFORE showing window...");
-
-    // 创建一个 channel 来同步等待异步操作完成
-    let (tx, rx) = std::sync::mpsc::channel();
-
-    // 在 Tauri 运行时中异步启动录音
-    tauri::async_runtime::spawn(async move {
-        let result = match crate::commands::audio::start_recording().await {
-            Ok(_) => {
-                println!("[Shortcut] ✅ Audio recording pre-started successfully!");
-                true
-            }
-            Err(e) => {
-                println!("[Shortcut] ❌ Failed to pre-start recording: {}", e);
-                // 即使录音启动失败，仍然显示窗口让用户看到错误状态
-                false
-            }
-        };
-        let _ = tx.send(result);
-    });
-
-    // 同步等待录音启动完成 (最多等待 3 秒)
-    let recording_started = rx.recv_timeout(Duration::from_secs(3)).unwrap_or_else(|e| {
-        println!("[Shortcut] ⚠️  Timeout waiting for recording to start: {}", e);
-        false
-    });
+    // 🎯 新架构：不再在后端启动录音
+    // 前端会通过 getUserMedia 自己启动录音，确保麦克风图标正确显示
+    println!("[Shortcut] 📱 Preparing to show window - frontend will handle audio capture");
 
     // Get or create the recording float window
     let is_new_window = app_handle.get_webview_window("recording-float").is_none();

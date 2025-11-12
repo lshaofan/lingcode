@@ -1,1 +1,1 @@
-export { RecordingFloat } from './RecordingFloat';
+export { RecordingFloat } from './RecordingFloat'

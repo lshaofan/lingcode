@@ -46,6 +46,7 @@ pub struct RecordingInfo {
 /// Audio device info
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioDevice {
+    pub id: String,
     pub name: String,
     pub is_default: bool,
 }

@@ -1,30 +1,30 @@
-import React from 'react';
-import { useUIStore } from '../../stores';
+import React from 'react'
+import { useUIStore } from '../../stores'
 
-type Page = 'home' | 'notes' | 'settings';
+type Page = 'home' | 'notes' | 'settings'
 
 interface NavItem {
-  id: Page;
-  icon: string;
-  label: string;
+  id: Page
+  icon: string
+  label: string
 }
 
 const navItems: NavItem[] = [
   { id: 'home', icon: '🏠', label: '首页' },
   { id: 'notes', icon: '📝', label: '笔记' },
   { id: 'settings', icon: '⚙️', label: '设置' },
-];
+]
 
 export const Sidebar: React.FC = () => {
-  const { currentPage, setCurrentPage, openSettings, isSettingsOpen } = useUIStore();
+  const { currentPage, setCurrentPage, openSettings, isSettingsOpen } = useUIStore()
 
   const handleNavClick = (page: Page) => {
     if (page === 'settings') {
-      openSettings();
+      openSettings()
     } else {
-      setCurrentPage(page);
+      setCurrentPage(page)
     }
-  };
+  }
 
   return (
     <aside className="w-52 bg-gray-50 border-r border-gray-200 flex flex-col">
@@ -35,9 +35,10 @@ export const Sidebar: React.FC = () => {
       <nav className="flex-1 px-2 py-4 space-y-1">
         {navItems.map((item) => {
           // 设置项的高亮状态：当前页面是设置 或 设置弹窗打开时
-          const isActive = item.id === 'settings'
-            ? (item.id === currentPage || isSettingsOpen)
-            : item.id === currentPage;
+          const isActive =
+            item.id === 'settings'
+              ? item.id === currentPage || isSettingsOpen
+              : item.id === currentPage
           return (
             <button
               key={item.id}
@@ -55,9 +56,9 @@ export const Sidebar: React.FC = () => {
               <span className="text-xl">{item.icon}</span>
               <span className="font-medium">{item.label}</span>
             </button>
-          );
+          )
         })}
       </nav>
     </aside>
-  );
-};
+  )
+}

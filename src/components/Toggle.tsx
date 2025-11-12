@@ -1,10 +1,10 @@
-import React from 'react';
+import React from 'react'
 
 interface ToggleProps {
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-  disabled?: boolean;
-  className?: string;
+  checked: boolean
+  onChange: (checked: boolean) => void
+  disabled?: boolean
+  className?: string
 }
 
 export const Toggle: React.FC<ToggleProps> = ({
@@ -15,9 +15,9 @@ export const Toggle: React.FC<ToggleProps> = ({
 }) => {
   const handleToggle = () => {
     if (!disabled) {
-      onChange(!checked);
+      onChange(!checked)
     }
-  };
+  }
 
   return (
     <button
@@ -43,5 +43,5 @@ export const Toggle: React.FC<ToggleProps> = ({
         `}
       />
     </button>
-  );
-};
+  )
+}

@@ -1,39 +1,39 @@
-import React, { useMemo } from 'react';
-import { useHistoryStore, useSettingsStore } from '../../stores';
-import { format, isToday, parseISO } from 'date-fns';
-import { zhCN } from 'date-fns/locale';
-import { getShortcutDisplayParts } from '../../utils/shortcutFormatter';
+import React, { useMemo } from 'react'
+import { useHistoryStore, useSettingsStore } from '../../stores'
+import { format, isToday, parseISO } from 'date-fns'
+import { zhCN } from 'date-fns/locale'
+import { getShortcutDisplayParts } from '../../utils/shortcutFormatter'
 
 export const HomePage: React.FC = () => {
-  const { transcriptions } = useHistoryStore();
-  const { settings } = useSettingsStore();
+  const { transcriptions } = useHistoryStore()
+  const { settings } = useSettingsStore()
 
   // 筛选今天的转录记录
   const todayTranscriptions = useMemo(() => {
     return transcriptions.filter((t) => {
       try {
-        const date = parseISO(t.created_at);
-        return isToday(date);
+        const date = parseISO(t.created_at)
+        return isToday(date)
       } catch {
-        return false;
+        return false
       }
-    });
-  }, [transcriptions]);
+    })
+  }, [transcriptions])
 
   // 格式化时间
   const formatTime = (dateString: string) => {
     try {
-      const date = parseISO(dateString);
-      return format(date, 'p', { locale: zhCN });
+      const date = parseISO(dateString)
+      return format(date, 'p', { locale: zhCN })
     } catch {
-      return dateString;
+      return dateString
     }
-  };
+  }
 
   // 获取快捷键显示部分
   const shortcutParts = useMemo(() => {
-    return getShortcutDisplayParts(settings.shortcut || 'Cmd+Shift+S');
-  }, [settings.shortcut]);
+    return getShortcutDisplayParts(settings.shortcut || 'Cmd+Shift+S')
+  }, [settings.shortcut])
 
   return (
     <div className="h-full flex flex-col max-w-4xl mx-auto p-8">
@@ -76,16 +76,10 @@ export const HomePage: React.FC = () => {
                   key={item.id || index}
                   className="p-4 bg-white border border-gray-200 rounded-lg hover:border-gray-300 hover:shadow-sm transition-all"
                 >
-                  <div className="text-xs text-gray-500 mb-2">
-                    {formatTime(item.created_at)}
-                  </div>
-                  <p className="text-gray-900 leading-relaxed whitespace-pre-wrap">
-                    {item.text}
-                  </p>
+                  <div className="text-xs text-gray-500 mb-2">{formatTime(item.created_at)}</div>
+                  <p className="text-gray-900 leading-relaxed whitespace-pre-wrap">{item.text}</p>
                   {item.app_context && (
-                    <div className="mt-2 text-xs text-gray-400">
-                      来自: {item.app_context}
-                    </div>
+                    <div className="mt-2 text-xs text-gray-400">来自: {item.app_context}</div>
                   )}
                 </div>
               ))}
@@ -94,5 +88,5 @@ export const HomePage: React.FC = () => {
         </div>
       </div>
     </div>
-  );
-};
+  )
+}

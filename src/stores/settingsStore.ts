@@ -1,10 +1,19 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { invoke } from '@tauri-apps/api/core'
+import { emit } from '@tauri-apps/api/event'
 
 export interface Settings {
+  [key: string]: any // 添加索引签名
   language: string
-  model: 'base' | 'small' | 'medium' | 'large'
+  model:
+    | 'base'
+    | 'small'
+    | 'medium'
+    | 'large'
+    | 'paraformer-zh'
+    | 'paraformer-large'
+    | 'sensevoice-small'
   shortcut: string
   microphone: string
   theme: 'light' | 'dark' | 'auto'
@@ -12,6 +21,7 @@ export interface Settings {
   showInDock: boolean
   notifications: boolean
   autoDetectLanguage: boolean
+  operationMode: 'direct' | 'preview'
 }
 
 interface SettingsStore {
@@ -34,7 +44,8 @@ const defaultSettings: Settings = {
   autoStart: false,
   showInDock: true,
   notifications: true,
-  autoDetectLanguage: true,
+  autoDetectLanguage: false, // 默认关闭自动检测，强制使用中文
+  operationMode: 'preview',
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -88,6 +99,10 @@ export const useSettingsStore = create<SettingsStore>()(
             settings: { ...state.settings, [key]: value },
             loading: false,
           }))
+
+          // 发送跨窗口事件，通知其他窗口设置已更新
+          await emit('settings-updated', { key, value })
+          console.log('[SettingsStore] Emitted settings-updated event:', key, value)
         } catch (error) {
           set({ error: String(error), loading: false })
         }
