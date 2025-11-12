@@ -30,3 +30,9 @@ WixTools/
 # Rust
 Cargo.lock
 **/*.rs.bk
+
+# Python Bundle (generated)
+python-bundle/
+
+# Audio assets (if needed in future)
+# assets/audio/
