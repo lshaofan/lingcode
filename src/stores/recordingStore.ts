@@ -4,9 +4,17 @@ import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useSettingsStore } from './settingsStore'
 import { AudioCapture, AudioConverter } from '../lib/audioCapture'
+import { audioFeedback } from '../lib/audioFeedback'
 
 export type RecordingState = 'idle' | 'recording' | 'processing' | 'error'
 export type OperationMode = 'direct' | 'preview'
+
+// 扩展 Window 接口以支持自定义属性
+declare global {
+  interface Window {
+    __recordingTimer?: number
+  }
+}
 
 // 🔥 引擎初始化缓存：记录已初始化的引擎和模型，避免重复初始化
 // 格式: { engineType: modelName } 例如: { whisper: 'base', funasr: 'paraformer-zh' }
@@ -81,7 +89,9 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
       })
 
       // 🔥 预热：初始化 getUserMedia 和 MediaRecorder，但不开始录音
-      console.log('[RecordingStore] Step 2: Prewarming AudioCapture (getUserMedia + MediaRecorder)...')
+      console.log(
+        '[RecordingStore] Step 2: Prewarming AudioCapture (getUserMedia + MediaRecorder)...',
+      )
       try {
         await audioCapture.prewarm()
         console.log('[RecordingStore] 🔥✅✅✅ Prewarm completed! Ready to record instantly!')
@@ -130,8 +140,12 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
       // 3. 最后进行冷启动创建新实例
       let audioCapture = cachedInstance || get().audioCapture
       if (audioCapture) {
-        const source = cachedInstance ? 'AudioCacheManager (component-level)' : 'store prewarmRecording'
-        console.log(`[RecordingStore] ⚡⚡⚡ Using cached AudioCapture from ${source} - INSTANT START!`)
+        const source = cachedInstance
+          ? 'AudioCacheManager (component-level)'
+          : 'store prewarmRecording'
+        console.log(
+          `[RecordingStore] ⚡⚡⚡ Using cached AudioCapture from ${source} - INSTANT START!`,
+        )
         // 直接开始录音（MediaRecorder 已经就绪）
         await audioCapture.start()
         console.log('[RecordingStore] ✅✅✅ Recording started instantly (cached)!')
@@ -157,10 +171,14 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
         })
 
         // 开始音频采集（这会触发浏览器请求麦克风权限）
-        console.log('[RecordingStore] Step 2: Starting audio capture (this will trigger mic permission)...')
+        console.log(
+          '[RecordingStore] Step 2: Starting audio capture (this will trigger mic permission)...',
+        )
         try {
           await audioCapture.start()
-          console.log('[RecordingStore] ✅✅✅ Audio capture started! Microphone indicator should be active!')
+          console.log(
+            '[RecordingStore] ✅✅✅ Audio capture started! Microphone indicator should be active!',
+          )
         } catch (error) {
           // 处理权限被拒绝的情况
           if (error instanceof Error && error.name === 'NotAllowedError') {
@@ -193,9 +211,16 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
       }, 100)
 
       // Store timer ID for cleanup
-      ;(window as any).__recordingTimer = timer
+      window.__recordingTimer = timer
 
-      console.log('[RecordingStore] 🎉 Recording started successfully using frontend audio capture!')
+      console.log(
+        '[RecordingStore] 🎉 Recording started successfully using frontend audio capture!',
+      )
+
+      // 🔊 播放开始录制音效（异步，不阻塞主流程）
+      audioFeedback.playStart().catch((err) => {
+        console.warn('[RecordingStore] Failed to play start sound:', err)
+      })
     } catch (error) {
       console.error('[RecordingStore] Failed to start recording:', error)
       set({ state: 'error', error: String(error) })
@@ -207,9 +232,9 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
       console.log('[RecordingStore] ⭐⭐⭐ stopRecording called, current state:', get().state)
 
       // Clear timer
-      if ((window as any).__recordingTimer) {
-        clearInterval((window as any).__recordingTimer)
-        delete (window as any).__recordingTimer
+      if (window.__recordingTimer) {
+        clearInterval(window.__recordingTimer)
+        delete window.__recordingTimer
       }
 
       const recordingDuration = get().duration
@@ -240,8 +265,18 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
 
       // 🎯 关键：将 Uint8Array (字节) 转换为 i16[] (样本)
       // PCM16 是小端序，每 2 个字节组成一个 i16 样本
-      const pcm16Samples = new Int16Array(pcm16Bytes.buffer, pcm16Bytes.byteOffset, pcm16Bytes.length / 2)
-      console.log('[RecordingStore] ✅ Converted to samples:', pcm16Samples.length, 'samples (', (pcm16Samples.length / 16000).toFixed(2), 'seconds )')
+      const pcm16Samples = new Int16Array(
+        pcm16Bytes.buffer,
+        pcm16Bytes.byteOffset,
+        pcm16Bytes.length / 2,
+      )
+      console.log(
+        '[RecordingStore] ✅ Converted to samples:',
+        pcm16Samples.length,
+        'samples (',
+        (pcm16Samples.length / 16000).toFixed(2),
+        'seconds )',
+      )
 
       // 3. 直接从 settingsStore 读取设置（不重新加载，避免不必要的网络请求）
       console.log('[RecordingStore] Step 3: Reading settings from store...')
@@ -260,8 +295,18 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
 
       const modelVersion = settings.model || 'base'
 
-      console.log('[RecordingStore] Step 4: Settings - Model:', modelVersion, 'Language:', language || 'auto')
-      console.log('[RecordingStore] Auto-detect:', settings.autoDetectLanguage, 'Configured language:', settings.language)
+      console.log(
+        '[RecordingStore] Step 4: Settings - Model:',
+        modelVersion,
+        'Language:',
+        language || 'auto',
+      )
+      console.log(
+        '[RecordingStore] Auto-detect:',
+        settings.autoDetectLanguage,
+        'Configured language:',
+        settings.language,
+      )
 
       // 判断模型类型
       const funasrModels = ['paraformer-zh', 'paraformer-large', 'sensevoice-small']
@@ -274,7 +319,10 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
         // 🔥 缓存检查：仅在模型变化时才重新初始化
         const cachedModel = engineInitCache['funasr']
         if (cachedModel !== modelVersion) {
-          console.log('[RecordingStore] Step 5: Initializing FunASR engine with model:', modelVersion)
+          console.log(
+            '[RecordingStore] Step 5: Initializing FunASR engine with model:',
+            modelVersion,
+          )
           console.log('[RecordingStore] Previous cached model:', cachedModel || 'none')
           try {
             await invoke('initialize_funasr', { modelName: modelVersion })
@@ -288,7 +336,9 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
         }
 
         // 调用新的转录命令（接收前端音频数据）
-        console.log('[RecordingStore] Step 6: Calling transcribe_audio_funasr with frontend audio data...')
+        console.log(
+          '[RecordingStore] Step 6: Calling transcribe_audio_funasr with frontend audio data...',
+        )
         transcriptionText = await invoke<string>('transcribe_audio_funasr', {
           audioData: Array.from(pcm16Samples),
           language: language,
@@ -297,7 +347,10 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
         // 🔥 缓存检查：仅在模型变化时才重新初始化
         const cachedModel = engineInitCache['whisper']
         if (cachedModel !== modelVersion) {
-          console.log('[RecordingStore] Step 5: Initializing Whisper engine with model:', modelVersion)
+          console.log(
+            '[RecordingStore] Step 5: Initializing Whisper engine with model:',
+            modelVersion,
+          )
           console.log('[RecordingStore] Previous cached model:', cachedModel || 'none')
           try {
             await invoke('initialize_whisper', { modelName: modelVersion })
@@ -341,7 +394,9 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
 
       if (mode === 'direct') {
         // 直接插入模式：转录完成后保持 processing 状态，显示"正在插入..."
-        console.log('[RecordingStore] 🔵🔵🔵 Direct mode: keeping processing state for text insertion')
+        console.log(
+          '[RecordingStore] 🔵🔵🔵 Direct mode: keeping processing state for text insertion',
+        )
         console.log('[RecordingStore] Transcription text:', transcriptionText)
         set({
           state: 'processing', // 保持 processing 状态
@@ -350,12 +405,22 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
           duration: 0,
           audioLevel: 0,
         })
-        console.log('[RecordingStore] 🔵 State updated, current state:', get().state, 'transcribedText:', get().transcribedText)
+        console.log(
+          '[RecordingStore] 🔵 State updated, current state:',
+          get().state,
+          'transcribedText:',
+          get().transcribedText,
+        )
 
         // 插入文本（后端会自动激活原应用）
         console.log('[RecordingStore] Inserting text...')
         await get().insertText()
         console.log('[RecordingStore] ✅ Text inserted successfully')
+
+        // 🔊 播放完成音效（在隐藏窗口之前播放）
+        audioFeedback.playOk().catch((err) => {
+          console.warn('[RecordingStore] Failed to play ok sound:', err)
+        })
 
         // 插入完成后隐藏窗口
         const window = getCurrentWindow()
@@ -395,11 +460,11 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
     }
   },
 
-  cancelRecording: async () => {
+  cancelRecording: () => {
     // Clear timer
-    if ((window as any).__recordingTimer) {
-      clearInterval((window as any).__recordingTimer)
-      delete (window as any).__recordingTimer
+    if (window.__recordingTimer) {
+      clearInterval(window.__recordingTimer)
+      delete window.__recordingTimer
     }
 
     // 停止前端音频采集
