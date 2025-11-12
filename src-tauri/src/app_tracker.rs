@@ -50,6 +50,14 @@ pub fn get_frontmost_app() -> Result<String, String> {
 /// 保存当前活跃应用（在录音开始前调用）
 pub fn save_current_app() -> Result<(), String> {
     let app_id = get_frontmost_app()?;
+
+    // 🔑 关键:如果当前应用是 Lingcode 自己,不保存
+    // 因为用户可能在设置页面测试快捷键
+    if app_id.contains("lingcode") || app_id.contains("com.lingcode.app") {
+        println!("[AppTracker] ⚠️  Current app is Lingcode itself, skipping save");
+        return Err("Current app is Lingcode itself".to_string());
+    }
+
     let mut previous = PREVIOUS_APP.lock().unwrap();
     *previous = Some(app_id.clone());
     println!("[AppTracker] Saved frontmost app: {}", app_id);

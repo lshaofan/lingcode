@@ -350,6 +350,225 @@ pub fn unregister_all<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     Ok(())
 }
 
+/// Command to unregister all shortcuts
+#[tauri::command]
+pub fn unregister_shortcuts(app: AppHandle) -> Result<(), String> {
+    println!("[Shortcut] Unregistering all shortcuts");
+    unregister_all(&app)
+}
+
+/// Command to register shortcuts based on settings
+#[tauri::command]
+pub fn register_shortcuts_cmd(app: AppHandle) -> Result<(), String> {
+    println!("[Shortcut] Registering shortcuts from settings");
+
+    // Get shortcut from database
+    if let Some(db) = app.try_state::<Arc<Database>>() {
+        let repo = SettingsRepository::new(db.connection());
+        if let Ok(Some(shortcut_value)) = repo.get("shortcut") {
+            if let Ok(shortcut_str) = serde_json::from_str::<String>(&shortcut_value) {
+                println!("[Shortcut] Found shortcut in settings: {}", shortcut_str);
+                return register_custom_shortcut(&app, &shortcut_str);
+            }
+        }
+    }
+
+    // Fallback to default shortcut
+    println!("[Shortcut] No custom shortcut found, using default");
+    register_shortcuts(&app)
+}
+
+/// Register a custom shortcut from string format (e.g. "Cmd+Shift+S")
+fn register_custom_shortcut<R: Runtime>(app: &AppHandle<R>, shortcut_str: &str) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::{Code, Modifiers};
+
+    println!("[Shortcut] Parsing shortcut string: {}", shortcut_str);
+
+    let parts: Vec<&str> = shortcut_str.split('+').collect();
+    if parts.is_empty() {
+        return Err("Invalid shortcut format".to_string());
+    }
+
+    let mut modifiers = Modifiers::empty();
+    let mut key_code: Option<Code> = None;
+
+    for part in parts {
+        let part = part.trim();
+        match part {
+            "Cmd" | "Command" | "Meta" => modifiers |= Modifiers::META,
+            "Ctrl" | "Control" => modifiers |= Modifiers::CONTROL,
+            "Alt" | "Opt" | "Option" => modifiers |= Modifiers::ALT,
+            "Shift" => modifiers |= Modifiers::SHIFT,
+            // Parse the main key
+            key => {
+                key_code = parse_key_code(key);
+                if key_code.is_none() {
+                    return Err(format!("Unknown key: {}", key));
+                }
+            }
+        }
+    }
+
+    // 如果没有主键,检查是否至少有修饰键
+    let code = if let Some(c) = key_code {
+        c
+    } else if !modifiers.is_empty() {
+        // 纯修饰键组合:由于 Tauri 限制,我们无法真正注册纯修饰键,返回错误
+        return Err("快捷键必须包含至少一个普通键(Tauri 框架限制)".to_string());
+    } else {
+        return Err("无效的快捷键格式".to_string());
+    };
+
+    let shortcut = Shortcut::new(Some(modifiers), code);
+    println!("[Shortcut] Registering custom shortcut: {:?}", shortcut);
+
+    let app_handle = app.clone();
+    app.global_shortcut()
+        .on_shortcut(shortcut, move |app, _shortcut, event| {
+            // Get operation mode
+            let operation_mode = get_operation_mode(&app_handle);
+            let is_direct_mode = operation_mode == "direct";
+
+            println!("[Shortcut] Shortcut event: {:?}, Mode: {}", event.state, operation_mode);
+
+            // Get current state
+            let mut state = RECORDING_STATE.lock().unwrap();
+            let current_state = *state;
+
+            // Handle different modes
+            if is_direct_mode {
+                // Direct mode: Press to start, Release to stop
+                match (event.state, current_state) {
+                    (ShortcutState::Pressed, RecordingState::Idle) => {
+                        // Start recording on press
+                        println!("[Shortcut] Direct mode: Press detected -> Start recording");
+                        *state = RecordingState::Recording;
+                        drop(state);
+
+                        // Create/show window and start recording
+                        handle_start_recording(&app_handle);
+                    }
+                    (ShortcutState::Released, RecordingState::Recording) => {
+                        // Stop recording on release
+                        println!("[Shortcut] Direct mode: Release detected -> Stop recording");
+                        *state = RecordingState::Processing;
+                        drop(state);
+
+                        // Stop recording
+                        handle_stop_recording(&app_handle);
+                    }
+                    _ => {
+                        // Ignore other combinations
+                        drop(state);
+                    }
+                }
+            } else {
+                // Preview mode: Toggle window visibility on press
+                if event.state != ShortcutState::Pressed {
+                    drop(state);
+                    return;
+                }
+
+                println!("[Shortcut] Preview mode: Toggle window visibility");
+
+                // Check if window is visible
+                if let Some(window) = app_handle.get_webview_window("recording-float") {
+                    // Window exists - toggle visibility
+                    if window.is_visible().unwrap_or(false) {
+                        println!("[Shortcut] Window visible - hiding and stopping recording");
+                        let _ = window.hide();
+                        let _ = window.emit("shortcut-stop-recording", ());
+                        *state = RecordingState::Idle;
+                        drop(state);
+                    } else {
+                        println!("[Shortcut] Window hidden - showing and starting recording");
+                        *state = RecordingState::Recording;
+                        drop(state);
+                        handle_start_recording(&app_handle);
+                    }
+                } else {
+                    // Window doesn't exist - create and start recording
+                    println!("[Shortcut] Window doesn't exist - creating and starting recording");
+                    *state = RecordingState::Recording;
+                    drop(state);
+                    handle_start_recording(&app_handle);
+                }
+            }
+        })
+        .map_err(|e| e.to_string())?;
+
+    println!("[Shortcut] Custom shortcut registration complete");
+    Ok(())
+}
+
+/// Parse a key string to Code enum
+fn parse_key_code(key: &str) -> Option<Code> {
+    match key.to_uppercase().as_str() {
+        // Letters
+        "A" => Some(Code::KeyA),
+        "B" => Some(Code::KeyB),
+        "C" => Some(Code::KeyC),
+        "D" => Some(Code::KeyD),
+        "E" => Some(Code::KeyE),
+        "F" => Some(Code::KeyF),
+        "G" => Some(Code::KeyG),
+        "H" => Some(Code::KeyH),
+        "I" => Some(Code::KeyI),
+        "J" => Some(Code::KeyJ),
+        "K" => Some(Code::KeyK),
+        "L" => Some(Code::KeyL),
+        "M" => Some(Code::KeyM),
+        "N" => Some(Code::KeyN),
+        "O" => Some(Code::KeyO),
+        "P" => Some(Code::KeyP),
+        "Q" => Some(Code::KeyQ),
+        "R" => Some(Code::KeyR),
+        "S" => Some(Code::KeyS),
+        "T" => Some(Code::KeyT),
+        "U" => Some(Code::KeyU),
+        "V" => Some(Code::KeyV),
+        "W" => Some(Code::KeyW),
+        "X" => Some(Code::KeyX),
+        "Y" => Some(Code::KeyY),
+        "Z" => Some(Code::KeyZ),
+        // Numbers
+        "0" => Some(Code::Digit0),
+        "1" => Some(Code::Digit1),
+        "2" => Some(Code::Digit2),
+        "3" => Some(Code::Digit3),
+        "4" => Some(Code::Digit4),
+        "5" => Some(Code::Digit5),
+        "6" => Some(Code::Digit6),
+        "7" => Some(Code::Digit7),
+        "8" => Some(Code::Digit8),
+        "9" => Some(Code::Digit9),
+        // Function keys
+        "F1" => Some(Code::F1),
+        "F2" => Some(Code::F2),
+        "F3" => Some(Code::F3),
+        "F4" => Some(Code::F4),
+        "F5" => Some(Code::F5),
+        "F6" => Some(Code::F6),
+        "F7" => Some(Code::F7),
+        "F8" => Some(Code::F8),
+        "F9" => Some(Code::F9),
+        "F10" => Some(Code::F10),
+        "F11" => Some(Code::F11),
+        "F12" => Some(Code::F12),
+        // Special keys
+        "SPACE" => Some(Code::Space),
+        "ESC" | "ESCAPE" => Some(Code::Escape),
+        "ENTER" | "RETURN" => Some(Code::Enter),
+        "TAB" => Some(Code::Tab),
+        "DELETE" | "BACKSPACE" => Some(Code::Backspace),
+        "UP" => Some(Code::ArrowUp),
+        "DOWN" => Some(Code::ArrowDown),
+        "LEFT" => Some(Code::ArrowLeft),
+        "RIGHT" => Some(Code::ArrowRight),
+        _ => None,
+    }
+}
+
 /// Command called by frontend when recording window is ready
 #[tauri::command]
 pub fn recording_window_ready(app: AppHandle) -> Result<(), String> {

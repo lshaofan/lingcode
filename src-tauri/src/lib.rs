@@ -112,6 +112,8 @@ pub fn run() {
             insert_text_at_cursor_cmd,
             // Shortcut commands
             shortcut::recording_window_ready,
+            shortcut::unregister_shortcuts,
+            shortcut::register_shortcuts_cmd,
         ])
         .setup(|app| {
             use crate::config::ConfigManager;

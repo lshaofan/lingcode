@@ -248,9 +248,14 @@ pub fn insert_text_at_cursor(text: &str) -> Result<(), String> {
     {
         if let Err(e) = crate::app_tracker::activate_previous_app() {
             println!("[Accessibility] Warning: Failed to activate previous app: {}", e);
-            // 继续尝试插入，可能应用已经是活跃的
+            // 如果激活失败,等待更长时间让用户手动切换回去或让系统自动恢复焦点
+            println!("[Accessibility] Waiting 300ms for focus to be restored...");
+            std::thread::sleep(std::time::Duration::from_millis(300));
         } else {
             println!("[Accessibility] Successfully activated previous app");
+            // 等待应用切换完成并获得焦点
+            println!("[Accessibility] Waiting 200ms for app activation...");
+            std::thread::sleep(std::time::Duration::from_millis(200));
         }
     }
 
@@ -270,19 +275,26 @@ pub fn insert_text_at_cursor(text: &str) -> Result<(), String> {
                         println!("[Accessibility] ✅ Successfully inserted using AX API (no clipboard)");
                         return Ok(());
                     } else {
-                        println!("[Accessibility] AX API failed: {:?}, trying clipboard method", result);
+                        println!("[Accessibility] ❌ AX API failed: {:?}", result);
+                        return Err("无法使用 AX API 插入文字,拒绝使用剪贴板方式".to_string());
                     }
                 } else {
                     release_ax_element(focused_element);
+                    println!("[Accessibility] ❌ Focused element is not a text field");
+                    return Err("焦点不在文本输入框中".to_string());
                 }
             }
-            _ => {}
+            Ok(_) => {
+                // 处理 Ok 但返回空指针的情况
+                println!("[Accessibility] ❌ Got Ok but element is null");
+                return Err("没有检测到焦点元素或元素为空".to_string());
+            }
+            Err(e) => {
+                println!("[Accessibility] ❌ Failed to get focused element: {}", e);
+                return Err(format!("无法获取焦点元素: {}", e));
+            }
         }
     }
-
-    // Fallback：使用剪贴板方式（会被剪贴板历史工具记录）
-    println!("[Accessibility] Using clipboard fallback method");
-    insert_text_via_paste(text)
 }
 
 unsafe fn insert_text_to_element(element: id, text: &str) -> Result<(), String> {
