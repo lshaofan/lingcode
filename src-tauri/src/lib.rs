@@ -221,6 +221,19 @@ pub fn run() {
             // This ensures the webview loads properly when the window is actually needed
             println!("[Setup] Recording float window will be created on first use");
 
+            // Handle window close event - hide instead of exit
+            if let Some(main_window) = app.get_webview_window("main") {
+                let window_clone = main_window.clone();
+                main_window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        // Prevent window from closing
+                        api.prevent_close();
+                        // Hide the window instead
+                        let _ = window_clone.hide();
+                    }
+                });
+            }
+
             #[cfg(debug_assertions)]
             {
                 let window = app.get_webview_window("main").unwrap();

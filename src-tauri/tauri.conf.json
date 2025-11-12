@@ -18,9 +18,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": [
-      "scripts/*.py"
-    ],
+    "resources": ["scripts/*.py"],
     "macOS": {
       "minimumSystemVersion": "10.15",
       "entitlements": "entitlements.plist",
@@ -54,10 +52,6 @@
         "enable": true,
         "scope": ["**"]
       }
-    },
-    "trayIcon": {
-      "iconPath": "icons/tray/iconTemplate.png",
-      "iconAsTemplate": true
     },
     "macOSPrivateApi": true
   },
