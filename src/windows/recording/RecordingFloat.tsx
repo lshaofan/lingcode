@@ -5,6 +5,8 @@ import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { useRecordingStore } from '../../stores';
 import { useSettingsStore } from '../../stores';
+import { AudioCapture } from '../../lib/audioCapture';
+import { AudioCacheManager } from '../../lib/audioCacheManager';
 
 export const RecordingFloat = () => {
   console.log('[RecordingFloat] 🎬🎬🎬 Component function called (RE-RENDER)');
@@ -21,6 +23,7 @@ export const RecordingFloat = () => {
   console.log('[RecordingFloat] 🎯 Operation mode:', operationMode);
   console.log('[RecordingFloat] 🔴 STATUS =', status);
 
+  const prewarmRecording = useRecordingStore((state) => state.prewarmRecording);
   const startRecording = useRecordingStore((state) => state.startRecording);
   const stopRecording = useRecordingStore((state) => state.stopRecording);
   const clearText = useRecordingStore((state) => state.clearText);
@@ -30,6 +33,18 @@ export const RecordingFloat = () => {
 
   const [showCopiedFeedback, setShowCopiedFeedback] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
+
+  // 🔥 音频缓存管理器 - 组件级单例
+  const [audioCacheManager] = useState(() => {
+    console.log('[RecordingFloat] 🎯 Creating AudioCacheManager');
+    return new AudioCacheManager({
+      sampleRate: 16000,
+      channelCount: 1,
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    });
+  });
 
   // Auto-resize window based on content size
   const resizeWindow = async () => {
@@ -77,6 +92,28 @@ export const RecordingFloat = () => {
       console.log('[RecordingFloat] ✅ Operation mode synced to recordingStore:', settings.operationMode);
     }
   }, [settings.operationMode, setOperationMode]);
+
+  // 🔥 自动重新预热：当录音完成后（状态变为 idle）自动失效旧缓存并重新预热
+  useEffect(() => {
+    const prewarmAfterRecording = async () => {
+      if (status === 'idle') {
+        console.log('[RecordingFloat] 🔥 Status changed to idle, invalidating cache and re-prewarming...');
+        try {
+          // 🔑 关键：先失效旧缓存（因为 stop() 已销毁实例）
+          audioCacheManager.invalidate();
+          console.log('[RecordingFloat] ❌ Old cache invalidated');
+
+          // 然后创建新实例并预热
+          await audioCacheManager.prewarm();
+          console.log('[RecordingFloat] ✅ Auto re-prewarm completed');
+        } catch (error) {
+          console.error('[RecordingFloat] ❌ Auto re-prewarm failed:', error);
+        }
+      }
+    };
+
+    prewarmAfterRecording();
+  }, [status, audioCacheManager]);
 
   // 监听设置更新事件，实现跨窗口同步
   useEffect(() => {
@@ -151,14 +188,37 @@ export const RecordingFloat = () => {
       }
     };
 
+    const prewarmAudio = async () => {
+      console.log('[RecordingFloat] 🔥 Starting audio prewarm via AudioCacheManager...');
+      try {
+        // 使用缓存管理器预热
+        await audioCacheManager.prewarm();
+        console.log('[RecordingFloat] 🔥✅ Audio prewarmed successfully!');
+
+        // 获取缓存状态
+        const status = audioCacheManager.getStatus();
+        console.log('[RecordingFloat] Cache status:', status);
+      } catch (error) {
+        console.error('[RecordingFloat] ❌ Audio prewarm failed:', error);
+        // 预热失败不阻塞流程，仍然可以使用冷启动
+      }
+    };
+
     const startHandler = async () => {
       console.log('🔥 [RecordingFloat] START event received from shortcut');
-      console.log('🔥 [RecordingFloat] Backend has already started recording, just updating UI...');
+      console.log('🎯 [RecordingFloat] Starting recording with cache support...');
       try {
-        // 🚀 CRITICAL FIX: 传递 skipBackendCall=true
-        // 因为后端已经在快捷键处理函数中启动了录音
-        // 这里只需要更新前端UI状态和启动计时器
-        await startRecording(true);
+        // 🎯 使用缓存管理器启动录音
+        // 优先使用缓存的实例,失效则冷启动
+        const cachedInstance = audioCacheManager.getCached();
+        if (cachedInstance) {
+          console.log('[RecordingFloat] ⚡ Using cached AudioCapture instance');
+        } else {
+          console.log('[RecordingFloat] ⚠️ No cached instance, will use cold start');
+        }
+
+        await startRecording(false, cachedInstance);
+        console.log('✅ [RecordingFloat] Recording started successfully!');
       } catch (error) {
         console.error('[RecordingFloat] ❌ startRecording failed:', error);
         // 如果录音启动失败（比如权限被拒绝），隐藏悬浮窗
@@ -209,6 +269,12 @@ export const RecordingFloat = () => {
       unlistenStart = await listen('shortcut-start-recording', startHandler);
       unlistenStop = await listen('shortcut-stop-recording', stopHandler);
       console.log('[RecordingFloat] ✅ Listeners registered');
+
+      // 🔥 关键修复：先预热，再通知后端窗口就绪
+      // 这样可以确保用户按快捷键时，录音设备已经准备好
+      await prewarmAudio();
+
+      // 预热完成后才通知后端，后端才会发送 start 事件
       await notifyBackendReady();
     };
 
@@ -217,13 +283,22 @@ export const RecordingFloat = () => {
     });
 
     return () => {
-      console.log('[RecordingFloat] Cleaning up');
+      console.log('[RecordingFloat] 🧹 Cleaning up component...');
       if (unlistenStart) unlistenStart();
       if (unlistenStop) unlistenStop();
+
+      // 🔑 销毁缓存管理器
+      console.log('[RecordingFloat] 💥 Destroying AudioCacheManager');
+      audioCacheManager.destroy();
+
+      // 🔑 关键修复：强制清理所有 AudioCapture 实例
+      console.log('[RecordingFloat] 🚨 Force cleaning all AudioCapture instances on unmount');
+      AudioCapture.cleanupAllInstances();
+
       // Reset initialized flag on real unmount
       initializedRef.current = false;
     };
-  }, []);
+  }, [audioCacheManager]);
 
   // Handle Esc key to close window
   useEffect(() => {
@@ -239,6 +314,11 @@ export const RecordingFloat = () => {
 
   const handleClose = async () => {
     console.log('[RecordingFloat] Closing window');
+
+    // 🔑 关键修复：关闭窗口前强制清理所有 AudioCapture 实例
+    console.log('[RecordingFloat] 🚨 Force cleaning all AudioCapture instances before closing');
+    AudioCapture.cleanupAllInstances();
+
     const window = getCurrentWindow();
 
     // 预览模式：直接隐藏窗口并清空文本

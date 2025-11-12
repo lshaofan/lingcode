@@ -23,10 +23,20 @@ const renderApp = async () => {
   const component = label === 'recording-float' ? <RecordingFloat /> : <App />
 
   console.log('[main.tsx] 🎨 Creating React root...')
+
+  // 🔑 关键修复：对于 recording-float 窗口禁用 StrictMode
+  // StrictMode 会导致组件双重挂载，创建两个 AudioCapture 实例
+  // 这会导致孤儿实例继续发送事件
+  const shouldUseStrictMode = label !== 'recording-float'
+
   ReactDOM.createRoot(rootElement).render(
-    <React.StrictMode>
-      {component}
-    </React.StrictMode>,
+    shouldUseStrictMode ? (
+      <React.StrictMode>
+        {component}
+      </React.StrictMode>
+    ) : (
+      component
+    ),
   )
 
   console.log('[main.tsx] ✅ Component rendered successfully')

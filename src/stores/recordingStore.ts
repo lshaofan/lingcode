@@ -3,9 +3,14 @@ import { invoke } from '@tauri-apps/api/core'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useSettingsStore } from './settingsStore'
+import { AudioCapture, AudioConverter } from '../lib/audioCapture'
 
 export type RecordingState = 'idle' | 'recording' | 'processing' | 'error'
 export type OperationMode = 'direct' | 'preview'
+
+// 🔥 引擎初始化缓存：记录已初始化的引擎和模型，避免重复初始化
+// 格式: { engineType: modelName } 例如: { whisper: 'base', funasr: 'paraformer-zh' }
+const engineInitCache: { [key: string]: string } = {}
 
 interface RecordingStore {
   state: RecordingState
@@ -15,9 +20,11 @@ interface RecordingStore {
   error: string | null
   audioLevel: number
   operationMode: OperationMode // 当前操作模式
+  audioCapture: AudioCapture | null // 前端音频采集实例
 
   // Actions
-  startRecording: (skipBackendCall?: boolean) => Promise<void>
+  prewarmRecording: () => Promise<void> // 预热：提前初始化 getUserMedia
+  startRecording: (skipBackendCall?: boolean, cachedInstance?: AudioCapture | null) => Promise<void>
   stopRecording: () => Promise<void>
   cancelRecording: () => void
   setAudioLevel: (level: number) => void
@@ -39,8 +46,72 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
   error: null,
   audioLevel: 0,
   operationMode: 'preview', // 默认预览模式
+  audioCapture: null, // 音频采集实例
 
-  startRecording: async (skipBackendCall = false) => {
+  prewarmRecording: async () => {
+    console.log('[RecordingStore] 🔥🔥🔥 ========== PREWARM RECORDING CALLED ==========')
+
+    try {
+      // 🔑 关键：检查是否已经在录音或已有实例
+      const currentState = get().state
+      const existingCapture = get().audioCapture
+
+      if (currentState === 'recording' || existingCapture) {
+        console.log('[RecordingStore] ⚠️  Already recording or instance exists, skipping prewarm')
+        console.log('[RecordingStore] State:', currentState, 'Has instance:', !!existingCapture)
+        return
+      }
+
+      // 🔑 关键修复：先清理所有可能泄漏的旧实例（仅在 idle 状态）
+      AudioCapture.cleanupAllInstances()
+
+      // 检查浏览器支持
+      if (!AudioCapture.isSupported()) {
+        throw new Error('您的浏览器不支持音频录制功能。请使用最新版本的浏览器。')
+      }
+
+      // 创建音频采集实例
+      console.log('[RecordingStore] Step 1: Creating AudioCapture instance...')
+      const audioCapture = new AudioCapture({
+        sampleRate: 16000,
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      })
+
+      // 🔥 预热：初始化 getUserMedia 和 MediaRecorder，但不开始录音
+      console.log('[RecordingStore] Step 2: Prewarming AudioCapture (getUserMedia + MediaRecorder)...')
+      try {
+        await audioCapture.prewarm()
+        console.log('[RecordingStore] 🔥✅✅✅ Prewarm completed! Ready to record instantly!')
+      } catch (error) {
+        // 处理权限被拒绝的情况
+        if (error instanceof Error && error.name === 'NotAllowedError') {
+          console.error('[RecordingStore] ❌ Microphone permission denied during prewarm')
+          set({
+            state: 'error',
+            error: '❌ 麦克风权限未授权\\n\\n请在浏览器中允许访问麦克风，然后重试。',
+          })
+          throw new Error('Microphone permission denied')
+        }
+        throw error
+      }
+
+      // 保存预热的实例
+      console.log('[RecordingStore] Step 3: Saving prewarmed instance...')
+      set({ audioCapture: audioCapture })
+      console.log('[RecordingStore] 🔥 Prewarm完成，实例已保存，等待 startRecording 调用')
+    } catch (error) {
+      console.error('[RecordingStore] Prewarm failed:', error)
+      set({ state: 'error', error: String(error) })
+    }
+  },
+
+  startRecording: async (skipBackendCall = false, cachedInstance = null) => {
+    console.log('🎤🎤🎤 [RecordingStore] ========== START RECORDING CALLED ==========')
+    console.log('[RecordingStore] Has cached instance from component:', !!cachedInstance)
+
     // 🚀 CRITICAL FIX: 立即检查并设置状态，防止并发调用
     const currentState = get().state
     if (currentState === 'recording') {
@@ -48,61 +119,73 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
       return
     }
 
-    console.log('🎤🎤🎤 [RecordingStore] ========== START RECORDING CALLED ==========')
     console.log('[RecordingStore] skipBackendCall:', skipBackendCall)
 
     try {
       console.log('[RecordingStore] Starting recording...')
 
-      // 如果 skipBackendCall=true，说明后端已经启动录音了
-      // 这种情况下只需要更新前端状态和启动计时器
-      if (skipBackendCall) {
-        console.log('[RecordingStore] ⚡ Skipping backend call - recording already started by shortcut handler')
+      // 🔥 优先级策略：
+      // 1. 优先使用组件传入的缓存实例（AudioCacheManager）
+      // 2. 其次使用 store 中保存的预热实例（旧的 prewarmRecording）
+      // 3. 最后进行冷启动创建新实例
+      let audioCapture = cachedInstance || get().audioCapture
+      if (audioCapture) {
+        const source = cachedInstance ? 'AudioCacheManager (component-level)' : 'store prewarmRecording'
+        console.log(`[RecordingStore] ⚡⚡⚡ Using cached AudioCapture from ${source} - INSTANT START!`)
+        // 直接开始录音（MediaRecorder 已经就绪）
+        await audioCapture.start()
+        console.log('[RecordingStore] ✅✅✅ Recording started instantly (cached)!')
+      } else {
+        console.log('[RecordingStore] ⚠️  No cached instance, using cold start...')
 
-        // 直接设置为 recording 状态
-        set({ state: 'recording', error: null, transcription: null, duration: 0 })
+        // 🔑 关键修复：清理所有可能泄漏的旧实例（热重载场景）
+        AudioCapture.cleanupAllInstances()
 
-        // 启动计时器
-        const timer = setInterval(() => {
-          set((state) => ({
-            duration: state.duration + 0.1,
-          }))
-        }, 100)
+        // 检查浏览器是否支持 getUserMedia
+        if (!AudioCapture.isSupported()) {
+          throw new Error('您的浏览器不支持音频录制功能。请使用最新版本的浏览器。')
+        }
 
-        // Store timer ID for cleanup
-        ;(window as any).__recordingTimer = timer
-        return
-      }
+        // 创建音频采集实例
+        console.log('[RecordingStore] Step 1: Creating AudioCapture instance...')
+        audioCapture = new AudioCapture({
+          sampleRate: 16000,
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        })
 
-      // 正常流程：前端主动调用（用户点击按钮）
-      // 1. 首先检查麦克风权限（在设置录音状态之前）
-      console.log('[RecordingStore] Step 1: Checking microphone permission...')
-      const permissionStatus = await invoke<string>('check_microphone_permission')
-      console.log('[RecordingStore] ✅ Permission status:', permissionStatus)
-
-      if (permissionStatus !== 'granted') {
-        console.log('[RecordingStore] ⚠️  Permission not granted, requesting...')
-        const newStatus = await invoke<string>('request_microphone_permission')
-        console.log('[RecordingStore] New permission status:', newStatus)
-
-        if (newStatus !== 'granted') {
-          console.error('[RecordingStore] ❌ Permission denied')
-          set({ state: 'error', error: '❌ 麦克风权限未授权\n\n请在系统设置中允许访问麦克风：\n系统设置 > 隐私与安全性 > 麦克风' })
-          // 抛出错误，阻止悬浮窗显示
-          throw new Error('Microphone permission denied')
+        // 开始音频采集（这会触发浏览器请求麦克风权限）
+        console.log('[RecordingStore] Step 2: Starting audio capture (this will trigger mic permission)...')
+        try {
+          await audioCapture.start()
+          console.log('[RecordingStore] ✅✅✅ Audio capture started! Microphone indicator should be active!')
+        } catch (error) {
+          // 处理权限被拒绝的情况
+          if (error instanceof Error && error.name === 'NotAllowedError') {
+            console.error('[RecordingStore] ❌ Microphone permission denied by user')
+            set({
+              state: 'error',
+              error: '❌ 麦克风权限未授权\n\n请在浏览器中允许访问麦克风，然后重试。',
+            })
+            throw new Error('Microphone permission denied')
+          }
+          throw error
         }
       }
 
-      // 2. 权限检查通过后，设置为 recording 状态
-      console.log('[RecordingStore] Setting state to recording...')
-      set({ state: 'recording', error: null, transcription: null, duration: 0 })
+      // 4. 保存音频采集实例并设置状态
+      console.log('[RecordingStore] Step 3: Setting recording state...')
+      set({
+        state: 'recording',
+        error: null,
+        transcription: null,
+        duration: 0,
+        audioCapture: audioCapture,
+      })
 
-      // 3. 开始音频录制
-      console.log('[RecordingStore] Step 2: Calling backend start_recording command...')
-      await invoke('start_recording')
-      console.log('[RecordingStore] ✅✅✅ Recording started successfully!')
-
-      // 3. 启动计时器
+      // 5. 启动计时器
       const timer = setInterval(() => {
         set((state) => ({
           duration: state.duration + 0.1,
@@ -111,6 +194,8 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
 
       // Store timer ID for cleanup
       ;(window as any).__recordingTimer = timer
+
+      console.log('[RecordingStore] 🎉 Recording started successfully using frontend audio capture!')
     } catch (error) {
       console.error('[RecordingStore] Failed to start recording:', error)
       set({ state: 'error', error: String(error) })
@@ -120,9 +205,6 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
   stopRecording: async () => {
     try {
       console.log('[RecordingStore] ⭐⭐⭐ stopRecording called, current state:', get().state)
-
-      // 不管当前状态是什么，都尝试停止录音（因为后台可能在录音）
-      // 这可以处理由于重复调用导致的状态不一致问题
 
       // Clear timer
       if ((window as any).__recordingTimer) {
@@ -135,33 +217,50 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
       set({ state: 'processing' })
       console.log('[RecordingStore] 🔵 State set to PROCESSING, new state:', get().state)
 
-      // 1. 停止录音
-      console.log('[RecordingStore] Step 1: Calling stop_recording command...')
-      const sampleCount = await invoke<number>('stop_recording')
-      console.log('[RecordingStore] ✅ Recording stopped, captured', sampleCount, 'samples')
+      // 🎯 新实现：从前端音频采集获取数据
+      // 1. 停止录音并获取音频数据
+      const audioCapture = get().audioCapture
+      if (!audioCapture) {
+        throw new Error('No audio capture instance found')
+      }
 
-      // 2. 重新加载设置，确保使用最新的模型配置（避免跨窗口同步问题）
-      console.log('[RecordingStore] Step 2: Reloading settings from backend...')
-      await useSettingsStore.getState().loadSettings()
+      console.log('[RecordingStore] Step 1: Stopping audio capture and getting audio data...')
+      const audioBlob = await audioCapture.stop()
+      console.log('[RecordingStore] ✅ Audio blob received:', audioBlob.size, 'bytes')
 
+      // 🔑 关键修复：stop() 会在内部调用 cleanup()，所以这里可以安全地清除引用
+      // 但我们需要确保 stop() 完成后再清除引用
+      console.log('[RecordingStore] ✅ AudioCapture cleanup completed by stop() method')
+      set({ audioCapture: null })
+
+      // 2. 将音频转换为 PCM16 格式（后端需要的格式）
+      console.log('[RecordingStore] Step 2: Converting audio to PCM16 format...')
+      const pcm16Bytes = await AudioConverter.blobToPCM16(audioBlob, 16000)
+      console.log('[RecordingStore] ✅ Converted to PCM16:', pcm16Bytes.length, 'bytes')
+
+      // 🎯 关键：将 Uint8Array (字节) 转换为 i16[] (样本)
+      // PCM16 是小端序，每 2 个字节组成一个 i16 样本
+      const pcm16Samples = new Int16Array(pcm16Bytes.buffer, pcm16Bytes.byteOffset, pcm16Bytes.length / 2)
+      console.log('[RecordingStore] ✅ Converted to samples:', pcm16Samples.length, 'samples (', (pcm16Samples.length / 16000).toFixed(2), 'seconds )')
+
+      // 3. 直接从 settingsStore 读取设置（不重新加载，避免不必要的网络请求）
+      console.log('[RecordingStore] Step 3: Reading settings from store...')
       const settings = useSettingsStore.getState().settings
-      console.log('[RecordingStore] ✅ Settings reloaded. Current model:', settings.model)
+      console.log('[RecordingStore] ✅ Using cached settings. Current model:', settings.model)
 
       // 默认使用中文，除非明确设置为其他语言
-      // 由于 Whisper 自动检测对中文支持不够好，我们默认强制使用中文
       let language: string | null = settings.language || 'zh'
 
       // 只有在明确设置自动检测且语言不是中文时才使用自动检测
       if (settings.autoDetectLanguage && settings.language !== 'zh') {
         language = null
       } else if (!settings.language || settings.language === 'zh') {
-        // 如果没有设置语言或者设置为中文，强制使用中文
         language = 'zh'
       }
 
       const modelVersion = settings.model || 'base'
 
-      console.log('[RecordingStore] Step 3: Settings - Model:', modelVersion, 'Language:', language || 'auto')
+      console.log('[RecordingStore] Step 4: Settings - Model:', modelVersion, 'Language:', language || 'auto')
       console.log('[RecordingStore] Auto-detect:', settings.autoDetectLanguage, 'Configured language:', settings.language)
 
       // 判断模型类型
@@ -170,36 +269,51 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
 
       let transcriptionText: string
 
+      // 4. 调用转录
       if (isFunASR) {
-        // 3.5 确保 FunASR 引擎已初始化
-        console.log('[RecordingStore] Step 3.5: Initializing FunASR engine with model:', modelVersion)
-        try {
-          await invoke('initialize_funasr', { modelName: modelVersion })
-          console.log('[RecordingStore] ✅ FunASR engine initialized')
-        } catch (error) {
-          console.error('[RecordingStore] Failed to initialize FunASR engine:', error)
-          // 如果初始化失败，尝试继续（可能已经初始化了）
+        // 🔥 缓存检查：仅在模型变化时才重新初始化
+        const cachedModel = engineInitCache['funasr']
+        if (cachedModel !== modelVersion) {
+          console.log('[RecordingStore] Step 5: Initializing FunASR engine with model:', modelVersion)
+          console.log('[RecordingStore] Previous cached model:', cachedModel || 'none')
+          try {
+            await invoke('initialize_funasr', { modelName: modelVersion })
+            engineInitCache['funasr'] = modelVersion // 更新缓存
+            console.log('[RecordingStore] ✅ FunASR engine initialized and cached')
+          } catch (error) {
+            console.error('[RecordingStore] Failed to initialize FunASR engine:', error)
+          }
+        } else {
+          console.log('[RecordingStore] ⚡ Using cached FunASR engine (model:', modelVersion, ')')
         }
 
-        // 4. 调用 FunASR 转录
-        console.log('[RecordingStore] Step 4: Calling transcribe_last_recording_funasr...')
-        transcriptionText = await invoke<string>('transcribe_last_recording_funasr', {
+        // 调用新的转录命令（接收前端音频数据）
+        console.log('[RecordingStore] Step 6: Calling transcribe_audio_funasr with frontend audio data...')
+        transcriptionText = await invoke<string>('transcribe_audio_funasr', {
+          audioData: Array.from(pcm16Samples),
           language: language,
         })
       } else {
-        // 3.5 确保 Whisper 引擎已初始化（使用当前选中的模型）
-        console.log('[RecordingStore] Step 3.5: Initializing Whisper engine with model:', modelVersion)
-        try {
-          await invoke('initialize_whisper', { modelName: modelVersion })
-          console.log('[RecordingStore] ✅ Whisper engine initialized')
-        } catch (error) {
-          console.error('[RecordingStore] Failed to initialize Whisper engine:', error)
-          // 如果初始化失败，尝试继续（可能已经初始化了）
+        // 🔥 缓存检查：仅在模型变化时才重新初始化
+        const cachedModel = engineInitCache['whisper']
+        if (cachedModel !== modelVersion) {
+          console.log('[RecordingStore] Step 5: Initializing Whisper engine with model:', modelVersion)
+          console.log('[RecordingStore] Previous cached model:', cachedModel || 'none')
+          try {
+            await invoke('initialize_whisper', { modelName: modelVersion })
+            engineInitCache['whisper'] = modelVersion // 更新缓存
+            console.log('[RecordingStore] ✅ Whisper engine initialized and cached')
+          } catch (error) {
+            console.error('[RecordingStore] Failed to initialize Whisper engine:', error)
+          }
+        } else {
+          console.log('[RecordingStore] ⚡ Using cached Whisper engine (model:', modelVersion, ')')
         }
 
-        // 4. 调用 Whisper 转录
-        console.log('[RecordingStore] Step 4: Calling transcribe_last_recording...')
-        transcriptionText = await invoke<string>('transcribe_last_recording', {
+        // 调用新的转录命令（接收前端音频数据）
+        console.log('[RecordingStore] Step 6: Calling transcribe_audio with frontend audio data...')
+        transcriptionText = await invoke<string>('transcribe_audio', {
+          audioData: Array.from(pcm16Samples),
           language: language,
         })
       }
@@ -288,12 +402,10 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
       delete (window as any).__recordingTimer
     }
 
-    // Call Tauri command to stop recording and clear buffer
-    try {
-      await invoke('stop_recording')
-      await invoke('clear_audio_buffer')
-    } catch (error) {
-      console.error('[RecordingStore] Failed to cancel recording:', error)
+    // 停止前端音频采集
+    const audioCapture = get().audioCapture
+    if (audioCapture) {
+      audioCapture.cancel()
     }
 
     set({
@@ -303,6 +415,7 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
       transcribedText: '',
       error: null,
       audioLevel: 0,
+      audioCapture: null,
     })
   },
 
