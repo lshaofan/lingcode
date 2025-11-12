@@ -75,7 +75,7 @@ export class AudioCapture {
     const supported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)
     console.log('[AudioCapture] 🔍 Checking getUserMedia support:')
     console.log('  - navigator.mediaDevices:', !!navigator.mediaDevices)
-    console.log('  - getUserMedia method:', !!(navigator.mediaDevices?.getUserMedia))
+    console.log('  - getUserMedia method:', !!navigator.mediaDevices?.getUserMedia)
     console.log('  - Current URL:', window.location.href)
     console.log('  - Is secure context:', window.isSecureContext)
     return supported
@@ -289,7 +289,9 @@ export class AudioCapture {
       // 不传参数时，MediaRecorder 会在 stop() 时一次性返回所有音频数据
       // 这确保了音频的完整性，不会丢失开头或结尾
       this.mediaRecorder.start()
-      console.log('[AudioCapture] ✅ MediaRecorder started (no timeslice - will collect all data on stop)')
+      console.log(
+        '[AudioCapture] ✅ MediaRecorder started (no timeslice - will collect all data on stop)',
+      )
     } catch (error) {
       console.error('[AudioCapture] Failed to start audio capture:', error)
       this.cleanup()
@@ -398,7 +400,7 @@ export class AudioCapture {
 
     // 关闭 AudioContext
     if (this.audioContext) {
-      this.audioContext.close()
+      void this.audioContext.close()
       this.audioContext = null
     }
 
@@ -407,19 +409,17 @@ export class AudioCapture {
 
     // 🔑 从全局跟踪中移除
     activeInstances.delete(this)
-    console.log('[AudioCapture] ✅ Cleanup completed, remaining active instances:', activeInstances.size)
+    console.log(
+      '[AudioCapture] ✅ Cleanup completed, remaining active instances:',
+      activeInstances.size,
+    )
   }
 
   /**
    * 获取支持的 MIME 类型
    */
   private getSupportedMimeType(): string {
-    const types = [
-      'audio/webm;codecs=opus',
-      'audio/webm',
-      'audio/ogg;codecs=opus',
-      'audio/mp4',
-    ]
+    const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4']
 
     for (const type of types) {
       if (MediaRecorder.isTypeSupported(type)) {
@@ -467,10 +467,7 @@ export class AudioConverter {
    * @param targetSampleRate 目标采样率（默认 16000）
    * @returns PCM16 数据的 Uint8Array
    */
-  static async blobToPCM16(
-    blob: Blob,
-    targetSampleRate: number = 16000
-  ): Promise<Uint8Array> {
+  static async blobToPCM16(blob: Blob, targetSampleRate: number = 16000): Promise<Uint8Array> {
     // 将 Blob 转换为 ArrayBuffer
     const arrayBuffer = await blob.arrayBuffer()
 
@@ -526,7 +523,7 @@ export class AudioConverter {
     blob: Blob,
     sampleRate: number = 16000,
     numChannels: number = 1,
-    bitDepth: number = 16
+    bitDepth: number = 16,
   ): Promise<Uint8Array> {
     // 先转换为 PCM16
     const pcm16 = await AudioConverter.blobToPCM16(blob, sampleRate)
@@ -536,7 +533,7 @@ export class AudioConverter {
       pcm16.length,
       sampleRate,
       numChannels,
-      bitDepth
+      bitDepth,
     )
 
     // 合并头部和数据
@@ -554,7 +551,7 @@ export class AudioConverter {
     dataSize: number,
     sampleRate: number,
     numChannels: number,
-    bitDepth: number
+    bitDepth: number,
   ): Uint8Array {
     const header = new ArrayBuffer(44)
     const view = new DataView(header)

@@ -5,9 +5,18 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useSettingsStore } from './settingsStore'
 import { AudioCapture, AudioConverter } from '../lib/audioCapture'
 import { audioFeedback } from '../lib/audioFeedback'
+import type { InlineToastType } from '../components/InlineToast'
 
 export type RecordingState = 'idle' | 'recording' | 'processing' | 'error'
 export type OperationMode = 'direct' | 'preview'
+
+// 气泡提示状态
+export interface ToastState {
+  type: InlineToastType
+  message: string
+  dismissible: boolean // 是否可手动关闭
+  duration: number // 自动消失时长（毫秒），0 表示不自动消失
+}
 
 // 扩展 Window 接口以支持自定义属性
 declare global {
@@ -30,6 +39,11 @@ interface RecordingStore {
   operationMode: OperationMode // 当前操作模式
   audioCapture: AudioCapture | null // 前端音频采集实例
 
+  // 气泡提示状态
+  toast: ToastState | null
+  isFirstRecording: boolean // 是否首次录音（用于首次初始化提示）
+  hasShownLongAudioTip: boolean // 是否已显示长音频提示
+
   // Actions
   prewarmRecording: () => Promise<void> // 预热：提前初始化 getUserMedia
   startRecording: (skipBackendCall?: boolean, cachedInstance?: AudioCapture | null) => Promise<void>
@@ -44,6 +58,15 @@ interface RecordingStore {
   copyText: () => Promise<void>
   insertText: () => Promise<void>
   setTranscribedText: (text: string) => void
+
+  // Toast actions
+  showToast: (
+    type: InlineToastType,
+    message: string,
+    dismissible?: boolean,
+    duration?: number,
+  ) => void
+  clearToast: () => void
 }
 
 export const useRecordingStore = create<RecordingStore>((set, get) => ({
@@ -55,6 +78,9 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
   audioLevel: 0,
   operationMode: 'preview', // 默认预览模式
   audioCapture: null, // 音频采集实例
+  toast: null,
+  isFirstRecording: true,
+  hasShownLongAudioTip: false,
 
   prewarmRecording: async () => {
     console.log('[RecordingStore] 🔥🔥🔥 ========== PREWARM RECORDING CALLED ==========')
@@ -183,9 +209,14 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
           // 处理权限被拒绝的情况
           if (error instanceof Error && error.name === 'NotAllowedError') {
             console.error('[RecordingStore] ❌ Microphone permission denied by user')
+            const errorMessage = '麦克风权限未授权\n\n请在浏览器中允许访问麦克风，然后重试。'
+
+            // 显示权限错误提示（严重错误，需要手动关闭）
+            get().showToast('error', errorMessage, true, 0)
+
             set({
               state: 'error',
-              error: '❌ 麦克风权限未授权\n\n请在浏览器中允许访问麦克风，然后重试。',
+              error: `❌ ${errorMessage}`,
             })
             throw new Error('Microphone permission denied')
           }
@@ -193,7 +224,14 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
         }
       }
 
-      // 4. 保存音频采集实例并设置状态
+      // 4. 检查是否首次录音，显示初始化提示
+      const isFirst = get().isFirstRecording
+      if (isFirst) {
+        console.log('[RecordingStore] First recording detected, showing initialization tip')
+        get().showToast('info', '首次启动需要初始化，请稍候...', false, 3000)
+      }
+
+      // 5. 保存音频采集实例并设置状态
       console.log('[RecordingStore] Step 3: Setting recording state...')
       set({
         state: 'recording',
@@ -201,9 +239,11 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
         transcription: null,
         duration: 0,
         audioCapture: audioCapture,
+        isFirstRecording: false, // 标记已完成首次录音
+        hasShownLongAudioTip: false, // 重置长音频提示标记
       })
 
-      // 5. 启动计时器
+      // 6. 启动计时器
       const timer = setInterval(() => {
         set((state) => ({
           duration: state.duration + 0.1,
@@ -242,6 +282,16 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
       set({ state: 'processing' })
       console.log('[RecordingStore] 🔵 State set to PROCESSING, new state:', get().state)
 
+      // 检查录音时长，如果超过20秒且未显示过提示，则显示长音频提示
+      const settings = useSettingsStore.getState().settings
+      const mode = settings.operationMode || 'preview'
+      if (mode === 'direct' && recordingDuration > 20 && !get().hasShownLongAudioTip) {
+        console.log('[RecordingStore] Long audio detected (>20s), showing tip')
+        // 长音频提示不自动消失（duration=0），直到转录完成后窗口隐藏时一起清除
+        get().showToast('info', '音频较长，转录可能需要更多时间...', false, 0)
+        set({ hasShownLongAudioTip: true })
+      }
+
       // 🎯 新实现：从前端音频采集获取数据
       // 1. 停止录音并获取音频数据
       const audioCapture = get().audioCapture
@@ -278,9 +328,8 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
         'seconds )',
       )
 
-      // 3. 直接从 settingsStore 读取设置（不重新加载，避免不必要的网络请求）
-      console.log('[RecordingStore] Step 3: Reading settings from store...')
-      const settings = useSettingsStore.getState().settings
+      // 3. 使用之前已经读取的 settings（不重新加载，避免不必要的网络请求）
+      console.log('[RecordingStore] Step 3: Using cached settings...')
       console.log('[RecordingStore] ✅ Using cached settings. Current model:', settings.model)
 
       // 默认使用中文，除非明确设置为其他语言
@@ -388,8 +437,7 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
         },
       })
 
-      // 根据操作模式决定后续行为（直接从 settingsStore 读取，确保同步）
-      const mode = settings.operationMode || 'preview'
+      // 根据操作模式决定后续行为（使用之前已读取的 mode）
       console.log('[RecordingStore] Operation mode from settings:', mode)
 
       if (mode === 'direct') {
@@ -422,6 +470,9 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
           console.warn('[RecordingStore] Failed to play ok sound:', err)
         })
 
+        // 清除所有提示（包括长音频提示）
+        get().clearToast()
+
         // 插入完成后隐藏窗口
         const window = getCurrentWindow()
         await window.hide()
@@ -445,17 +496,25 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
       console.error('[RecordingStore] Transcription error:', error)
 
       // 根据操作模式处理错误（直接从 settingsStore 读取，确保同步）
-      const settings = useSettingsStore.getState().settings
-      const mode = settings.operationMode || 'preview'
-      if (mode === 'direct') {
-        // 直接插入模式：转录失败时隐藏窗口，不打扰用户
-        console.log('[RecordingStore] Direct mode: hiding window on transcription error')
-        const window = getCurrentWindow()
-        await window.hide()
-        set({ state: 'idle', error: null, transcribedText: '' })
+      const errorSettings = useSettingsStore.getState().settings
+      const errorMode = errorSettings.operationMode || 'preview'
+      const errorMessage = `转录失败: ${String(error)}`
+
+      if (errorMode === 'direct') {
+        // 直接插入模式：显示错误提示（一般错误，5秒自动消失），然后隐藏窗口
+        console.log('[RecordingStore] Direct mode: showing error toast then hiding window')
+        get().showToast('error', errorMessage, false, 5000)
+
+        // 延迟隐藏窗口，让用户看到错误提示
+        setTimeout(async () => {
+          const window = getCurrentWindow()
+          await window.hide()
+        }, 5000)
+
+        set({ state: 'idle', error: errorMessage, transcribedText: '' })
       } else {
-        // 预览模式：显示错误信息
-        set({ state: 'error', error: String(error) })
+        // 预览模式：显示错误信息（保持现有行为）
+        set({ state: 'error', error: errorMessage })
       }
     }
   },
@@ -539,6 +598,9 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
         if (!hasPermission) {
           console.log('[RecordingStore] Requesting accessibility permission...')
           await invoke('request_accessibility_permission_cmd')
+
+          // 显示权限错误提示（严重错误，需要手动关闭）
+          get().showToast('error', '需要辅助功能权限才能插入文本。请在系统设置中授权。', true, 0)
           set({ error: '需要辅助功能权限才能插入文本。请在系统设置中授权。' })
           return
         }
@@ -549,8 +611,28 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
         console.log('[RecordingStore] Text inserted successfully')
       } catch (error) {
         console.error('[RecordingStore] Failed to insert text:', error)
-        set({ error: `插入文本失败: ${String(error)}` })
+        const errorMessage = `插入文本失败: ${String(error)}`
+
+        // 显示插入失败错误（一般错误，5秒自动消失）
+        get().showToast('error', errorMessage, false, 5000)
+        set({ error: errorMessage })
       }
     }
+  },
+
+  // Toast 管理方法
+  showToast: (type: InlineToastType, message: string, dismissible = false, duration = 0) => {
+    set({
+      toast: {
+        type,
+        message,
+        dismissible,
+        duration,
+      },
+    })
+  },
+
+  clearToast: () => {
+    set({ toast: null })
   },
 }))

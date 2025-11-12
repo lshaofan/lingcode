@@ -11,7 +11,7 @@ if (!rootElement) {
 }
 
 // 根据窗口 label 决定渲染哪个组件
-const renderApp = async () => {
+const renderApp = () => {
   console.log('[main.tsx] 🚀 Starting renderApp function')
 
   const window = getCurrentWindow()
@@ -30,17 +30,11 @@ const renderApp = async () => {
   const shouldUseStrictMode = label !== 'recording-float'
 
   ReactDOM.createRoot(rootElement).render(
-    shouldUseStrictMode ? (
-      <React.StrictMode>
-        {component}
-      </React.StrictMode>
-    ) : (
-      component
-    ),
+    shouldUseStrictMode ? <React.StrictMode>{component}</React.StrictMode> : component,
   )
 
   console.log('[main.tsx] ✅ Component rendered successfully')
 }
 
 console.log('[main.tsx] 🌟 main.tsx script loaded, calling renderApp()')
-renderApp()
+void renderApp()

@@ -1,251 +1,285 @@
-import { useState, useEffect, useRef } from 'react';
-import { Mic, X, Trash2, Copy, CornerDownLeft } from 'lucide-react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
-import { listen } from '@tauri-apps/api/event';
-import { invoke } from '@tauri-apps/api/core';
-import { useRecordingStore } from '../../stores';
-import { useSettingsStore } from '../../stores';
-import { AudioCapture } from '../../lib/audioCapture';
-import { AudioCacheManager } from '../../lib/audioCacheManager';
+import { useState, useEffect, useRef } from 'react'
+import { Mic, X, Trash2, Copy, CornerDownLeft } from 'lucide-react'
+import { getCurrentWindow } from '@tauri-apps/api/window'
+import { listen } from '@tauri-apps/api/event'
+import { invoke } from '@tauri-apps/api/core'
+import { useRecordingStore } from '../../stores'
+import { useSettingsStore } from '../../stores'
+import { AudioCapture } from '../../lib/audioCapture'
+import { AudioCacheManager } from '../../lib/audioCacheManager'
+import { InlineToast } from '../../components/InlineToast'
 
 export const RecordingFloat = () => {
-  console.log('[RecordingFloat] 🎬🎬🎬 Component function called (RE-RENDER)');
+  console.log('[RecordingFloat] 🎬🎬🎬 Component function called (RE-RENDER)')
 
-  const status = useRecordingStore((state) => state.state);
-  const transcribedText = useRecordingStore((state) => state.transcribedText);
-  const audioLevel = useRecordingStore((state) => state.audioLevel);
+  const status = useRecordingStore((state) => state.state)
+  const transcribedText = useRecordingStore((state) => state.transcribedText)
+  const audioLevel = useRecordingStore((state) => state.audioLevel)
+  const toast = useRecordingStore((state) => state.toast)
+  const clearToast = useRecordingStore((state) => state.clearToast)
 
   // 直接从设置中读取操作模式，而不是从 recordingStore
-  const settings = useSettingsStore((state) => state.settings);
-  const operationMode = settings.operationMode || 'preview';
+  const settings = useSettingsStore((state) => state.settings)
+  const operationMode = settings.operationMode || 'preview'
 
-  console.log('[RecordingFloat] 📊📊📊 Current state:', { status, transcribedText: transcribedText?.substring(0, 50), audioLevel, operationMode });
-  console.log('[RecordingFloat] 🎯 Operation mode:', operationMode);
-  console.log('[RecordingFloat] 🔴 STATUS =', status);
+  console.log('[RecordingFloat] 📊📊📊 Current state:', {
+    status,
+    transcribedText: transcribedText?.substring(0, 50),
+    audioLevel,
+    operationMode,
+  })
+  console.log('[RecordingFloat] 🎯 Operation mode:', operationMode)
+  console.log('[RecordingFloat] 🔴 STATUS =', status)
 
-  const prewarmRecording = useRecordingStore((state) => state.prewarmRecording);
-  const startRecording = useRecordingStore((state) => state.startRecording);
-  const stopRecording = useRecordingStore((state) => state.stopRecording);
-  const clearText = useRecordingStore((state) => state.clearText);
-  const copyText = useRecordingStore((state) => state.copyText);
-  const insertText = useRecordingStore((state) => state.insertText);
-  const setOperationMode = useRecordingStore((state) => state.setOperationMode);
+  const startRecording = useRecordingStore((state) => state.startRecording)
+  const stopRecording = useRecordingStore((state) => state.stopRecording)
+  const clearText = useRecordingStore((state) => state.clearText)
+  const copyText = useRecordingStore((state) => state.copyText)
+  const insertText = useRecordingStore((state) => state.insertText)
+  const setOperationMode = useRecordingStore((state) => state.setOperationMode)
 
-  const [showCopiedFeedback, setShowCopiedFeedback] = useState(false);
-  const contentRef = useRef<HTMLDivElement>(null);
+  const [showCopiedFeedback, setShowCopiedFeedback] = useState(false)
+  const contentRef = useRef<HTMLDivElement>(null)
 
   // 🔥 音频缓存管理器 - 组件级单例
   const [audioCacheManager] = useState(() => {
-    console.log('[RecordingFloat] 🎯 Creating AudioCacheManager');
+    console.log('[RecordingFloat] 🎯 Creating AudioCacheManager')
     return new AudioCacheManager({
       sampleRate: 16000,
       channelCount: 1,
       echoCancellation: true,
       noiseSuppression: true,
       autoGainControl: true,
-    });
-  });
+    })
+  })
 
   // Auto-resize window based on content size
   const resizeWindow = async () => {
     try {
-      let width;
-      let height;
+      let width
+      let height
 
       // 预览模式：使用大窗口
       if (operationMode === 'preview') {
-        width = 900;
-        height = 200;
+        width = 900
+        height = 200
       } else {
-        // 直接插入模式：使用较窄的窗口
-        width = 400;
-        height = 120;
+        // 直接插入模式：扩展高度以容纳气泡提示
+        width = 400
+        height = 180 // 从 120 增加到 180，为气泡提示预留空间
       }
 
-      console.log('[RecordingFloat] Resizing window to:', width, 'x', height, 'Status:', status, 'Mode:', operationMode, 'Has text:', !!transcribedText);
+      console.log(
+        '[RecordingFloat] Resizing window to:',
+        width,
+        'x',
+        height,
+        'Status:',
+        status,
+        'Mode:',
+        operationMode,
+        'Has text:',
+        !!transcribedText,
+      )
 
       await invoke('resize_recording_float', {
         width,
-        height
-      });
+        height,
+      })
     } catch (error) {
-      console.error('[RecordingFloat] Failed to resize window:', error);
+      console.error('[RecordingFloat] Failed to resize window:', error)
     }
-  };
+  }
 
   // Monitor content size changes and resize window accordingly
   useEffect(() => {
     // Initial resize with a small delay
     const timeoutId = setTimeout(() => {
-      resizeWindow();
-    }, 50);
+      void resizeWindow()
+    }, 50)
 
     return () => {
-      clearTimeout(timeoutId);
-    };
-  }, [status, transcribedText, operationMode]); // Resize when status, text or mode changes
+      clearTimeout(timeoutId)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, transcribedText, operationMode]) // Resize when status, text or mode changes
 
   // 同步操作模式到 recordingStore（用于 stopRecording 逻辑）
   useEffect(() => {
     if (settings.operationMode) {
-      setOperationMode(settings.operationMode);
-      console.log('[RecordingFloat] ✅ Operation mode synced to recordingStore:', settings.operationMode);
+      setOperationMode(settings.operationMode)
+      console.log(
+        '[RecordingFloat] ✅ Operation mode synced to recordingStore:',
+        settings.operationMode,
+      )
     }
-  }, [settings.operationMode, setOperationMode]);
+  }, [settings.operationMode, setOperationMode])
 
   // 🔥 自动重新预热：当录音完成后（状态变为 idle）自动失效旧缓存并重新预热
   useEffect(() => {
     const prewarmAfterRecording = async () => {
       if (status === 'idle') {
-        console.log('[RecordingFloat] 🔥 Status changed to idle, invalidating cache and re-prewarming...');
+        console.log(
+          '[RecordingFloat] 🔥 Status changed to idle, invalidating cache and re-prewarming...',
+        )
         try {
           // 🔑 关键：先失效旧缓存（因为 stop() 已销毁实例）
-          audioCacheManager.invalidate();
-          console.log('[RecordingFloat] ❌ Old cache invalidated');
+          audioCacheManager.invalidate()
+          console.log('[RecordingFloat] ❌ Old cache invalidated')
 
           // 然后创建新实例并预热
-          await audioCacheManager.prewarm();
-          console.log('[RecordingFloat] ✅ Auto re-prewarm completed');
+          await audioCacheManager.prewarm()
+          console.log('[RecordingFloat] ✅ Auto re-prewarm completed')
         } catch (error) {
-          console.error('[RecordingFloat] ❌ Auto re-prewarm failed:', error);
+          console.error('[RecordingFloat] ❌ Auto re-prewarm failed:', error)
         }
       }
-    };
+    }
 
-    prewarmAfterRecording();
-  }, [status, audioCacheManager]);
+    void prewarmAfterRecording()
+  }, [status, audioCacheManager])
+
+  // Tauri 事件类型定义
+  interface SettingsUpdatedPayload {
+    key: 'operationMode' | 'model' | 'hotkey' | 'language' | 'autoDetectLanguage'
+    value: string | boolean
+  }
+
+  interface SettingsUpdatedEvent {
+    payload: SettingsUpdatedPayload
+  }
 
   // 监听设置更新事件，实现跨窗口同步
   useEffect(() => {
-    let unlisten: (() => void) | null = null;
+    let unlisten: (() => void) | null = null
 
     const setupListener = async () => {
-      console.log('[RecordingFloat] Setting up settings-updated listener...');
-      unlisten = await listen('settings-updated', (event: any) => {
-        console.log('[RecordingFloat] 🔄 Received settings-updated event:', event.payload);
+      console.log('[RecordingFloat] Setting up settings-updated listener...')
+      unlisten = await listen('settings-updated', (event: SettingsUpdatedEvent) => {
+        console.log('[RecordingFloat] 🔄 Received settings-updated event:', event.payload)
 
         // 当操作模式或模型变化时，重新加载设置
         if (event.payload.key === 'operationMode') {
-          console.log('[RecordingFloat] Operation mode changed, reloading window...');
-          window.location.reload();
+          console.log('[RecordingFloat] Operation mode changed, reloading window...')
+          window.location.reload()
         } else if (event.payload.key === 'model') {
-          console.log('[RecordingFloat] Model changed to:', event.payload.value);
+          console.log('[RecordingFloat] Model changed to:', event.payload.value)
           // 更新本地 settingsStore
-          const { loadSettings } = useSettingsStore.getState();
+          const { loadSettings } = useSettingsStore.getState()
           loadSettings().catch((error) => {
-            console.error('[RecordingFloat] Failed to reload settings:', error);
-          });
+            console.error('[RecordingFloat] Failed to reload settings:', error)
+          })
         }
-      });
-    };
+      })
+    }
 
     setupListener().catch((error) => {
-      console.error('[RecordingFloat] Failed to setup settings-updated listener:', error);
-    });
+      console.error('[RecordingFloat] Failed to setup settings-updated listener:', error)
+    })
 
     return () => {
-      if (unlisten) unlisten();
-    };
-  }, []);
+      if (unlisten) unlisten()
+    }
+  }, [])
 
   // 🚀 CRITICAL FIX: Use global flag to prevent duplicate notifications across component remounts
   // React StrictMode will cause component to mount/unmount/mount, so we need a flag outside component scope
-  const initializedRef = useRef(false);
+  const initializedRef = useRef(false)
 
   useEffect(() => {
     // Prevent duplicate initialization in React StrictMode
     // NOTE: In React 18 StrictMode, components mount twice in development
     // This only prevents double-mounting, NOT window re-use issues
     if (initializedRef.current) {
-      console.log('[RecordingFloat] ⚠️ Already initialized, skipping duplicate setup');
-      return;
+      console.log('[RecordingFloat] ⚠️ Already initialized, skipping duplicate setup')
+      return
     }
-    initializedRef.current = true;
+    initializedRef.current = true
 
-    console.log('[RecordingFloat] 🚀 Mount useEffect running');
+    console.log('[RecordingFloat] 🚀 Mount useEffect running')
 
     // Set transparent background for the window
-    document.documentElement.style.backgroundColor = 'transparent';
-    document.documentElement.style.overflow = 'hidden';
-    document.body.style.backgroundColor = 'transparent';
-    document.body.style.overflow = 'hidden';
-    document.body.style.margin = '0';
-    document.body.style.padding = '0';
+    document.documentElement.style.backgroundColor = 'transparent'
+    document.documentElement.style.overflow = 'hidden'
+    document.body.style.backgroundColor = 'transparent'
+    document.body.style.overflow = 'hidden'
+    document.body.style.margin = '0'
+    document.body.style.padding = '0'
 
-    console.log('[RecordingFloat] ✅ Component mounted and styles applied');
+    console.log('[RecordingFloat] ✅ Component mounted and styles applied')
 
     // Register event listeners
-    let unlistenStart: (() => void) | null = null;
-    let unlistenStop: (() => void) | null = null;
+    let unlistenStart: (() => void) | null = null
+    let unlistenStop: (() => void) | null = null
 
     const notifyBackendReady = async () => {
-      console.log('[RecordingFloat] 📤 Notifying backend window is ready...');
+      console.log('[RecordingFloat] 📤 Notifying backend window is ready...')
       try {
-        await invoke('recording_window_ready');
-        console.log('[RecordingFloat] ✅ Backend notified successfully');
+        await invoke('recording_window_ready')
+        console.log('[RecordingFloat] ✅ Backend notified successfully')
       } catch (error) {
-        console.error('[RecordingFloat] ❌ Failed to notify backend:', error);
+        console.error('[RecordingFloat] ❌ Failed to notify backend:', error)
       }
-    };
+    }
 
     const prewarmAudio = async () => {
-      console.log('[RecordingFloat] 🔥 Starting audio prewarm via AudioCacheManager...');
+      console.log('[RecordingFloat] 🔥 Starting audio prewarm via AudioCacheManager...')
       try {
         // 使用缓存管理器预热
-        await audioCacheManager.prewarm();
-        console.log('[RecordingFloat] 🔥✅ Audio prewarmed successfully!');
+        await audioCacheManager.prewarm()
+        console.log('[RecordingFloat] 🔥✅ Audio prewarmed successfully!')
 
         // 获取缓存状态
-        const status = audioCacheManager.getStatus();
-        console.log('[RecordingFloat] Cache status:', status);
+        const status = audioCacheManager.getStatus()
+        console.log('[RecordingFloat] Cache status:', status)
       } catch (error) {
-        console.error('[RecordingFloat] ❌ Audio prewarm failed:', error);
+        console.error('[RecordingFloat] ❌ Audio prewarm failed:', error)
         // 预热失败不阻塞流程，仍然可以使用冷启动
       }
-    };
+    }
 
     const startHandler = async () => {
-      console.log('🔥 [RecordingFloat] START event received from shortcut');
-      console.log('🎯 [RecordingFloat] Starting recording with cache support...');
+      console.log('🔥 [RecordingFloat] START event received from shortcut')
+      console.log('🎯 [RecordingFloat] Starting recording with cache support...')
       try {
         // 🎯 使用缓存管理器启动录音
         // 优先使用缓存的实例,失效则冷启动
-        const cachedInstance = audioCacheManager.getCached();
+        const cachedInstance = audioCacheManager.getCached()
         if (cachedInstance) {
-          console.log('[RecordingFloat] ⚡ Using cached AudioCapture instance');
+          console.log('[RecordingFloat] ⚡ Using cached AudioCapture instance')
         } else {
-          console.log('[RecordingFloat] ⚠️ No cached instance, will use cold start');
+          console.log('[RecordingFloat] ⚠️ No cached instance, will use cold start')
         }
 
-        await startRecording(false, cachedInstance);
-        console.log('✅ [RecordingFloat] Recording started successfully!');
+        await startRecording(false, cachedInstance)
+        console.log('✅ [RecordingFloat] Recording started successfully!')
       } catch (error) {
-        console.error('[RecordingFloat] ❌ startRecording failed:', error);
+        console.error('[RecordingFloat] ❌ startRecording failed:', error)
         // 如果录音启动失败（比如权限被拒绝），隐藏悬浮窗
-        const window = getCurrentWindow();
-        await window.hide();
+        const window = getCurrentWindow()
+        await window.hide()
       }
-    };
+    }
 
     const stopHandler = async () => {
-      console.log('⏹️ ⏹️ ⏹️  [RecordingFloat] STOP event received from backend');
-      const settings = useSettingsStore.getState().settings;
-      const mode = settings.operationMode || 'preview';
-      const currentState = useRecordingStore.getState().state;
+      console.log('⏹️ ⏹️ ⏹️  [RecordingFloat] STOP event received from backend')
+      const settings = useSettingsStore.getState().settings
+      const mode = settings.operationMode || 'preview'
+      const currentState = useRecordingStore.getState().state
 
-      console.log('[RecordingFloat] 🔴🔴🔴 Stop handler - mode:', mode, 'state:', currentState);
+      console.log('[RecordingFloat] 🔴🔴🔴 Stop handler - mode:', mode, 'state:', currentState)
 
       if (mode === 'preview') {
         // 预览模式: 停止录音并显示结果
         if (currentState === 'recording') {
-          await stopRecording();
+          await stopRecording()
         }
       } else {
         // 直接插入模式: 只在 recording 状态时才处理
         // 🚨 CRITICAL FIX: 后端可能发送多次 stop 事件,我们需要防止重复处理
         if (currentState === 'recording') {
-          console.log('[RecordingFloat] 🔴 Direct mode: calling stopRecording()');
-          await stopRecording();
+          console.log('[RecordingFloat] 🔴 Direct mode: calling stopRecording()')
+          await stopRecording()
           // 注意: 不要在这里隐藏窗口!
           // stopRecording 内部会:
           // 1. 设置 processing 状态 (显示"正在转录...")
@@ -253,106 +287,113 @@ export const RecordingFloat = () => {
           // 3. 插入完成后隐藏窗口
         } else if (currentState === 'processing') {
           // 🟡 正在处理中,忽略重复的停止事件
-          console.log('[RecordingFloat] 🟡 Direct mode: already processing, ignoring duplicate stop event');
+          console.log(
+            '[RecordingFloat] 🟡 Direct mode: already processing, ignoring duplicate stop event',
+          )
         } else {
           // idle 或 error 状态 - 可能是异常情况,隐藏窗口
-          console.log('[RecordingFloat] 🟠 Direct mode: unexpected state, hiding window');
-          const window = getCurrentWindow();
-          await window.hide();
-          clearText();
+          console.log('[RecordingFloat] 🟠 Direct mode: unexpected state, hiding window')
+          const window = getCurrentWindow()
+          await window.hide()
+          clearText()
         }
       }
-    };
+    }
 
     // Setup listeners and notify backend
-    const setup = async () => {
-      unlistenStart = await listen('shortcut-start-recording', startHandler);
-      unlistenStop = await listen('shortcut-stop-recording', stopHandler);
-      console.log('[RecordingFloat] ✅ Listeners registered');
+    void (async () => {
+      // 包装 startHandler 和 stopHandler，使它们返回 void
+      unlistenStart = await listen('shortcut-start-recording', () => {
+        void startHandler()
+      })
+      unlistenStop = await listen('shortcut-stop-recording', () => {
+        void stopHandler()
+      })
+      console.log('[RecordingFloat] ✅ Listeners registered')
 
       // 🔥 关键修复：先预热，再通知后端窗口就绪
       // 这样可以确保用户按快捷键时，录音设备已经准备好
-      await prewarmAudio();
+      await prewarmAudio()
 
       // 预热完成后才通知后端，后端才会发送 start 事件
-      await notifyBackendReady();
-    };
-
-    setup().catch((error) => {
-      console.error('[RecordingFloat] ❌ Setup failed:', error);
-    });
+      await notifyBackendReady()
+    })()
 
     return () => {
-      console.log('[RecordingFloat] 🧹 Cleaning up component...');
-      if (unlistenStart) unlistenStart();
-      if (unlistenStop) unlistenStop();
+      console.log('[RecordingFloat] 🧹 Cleaning up component...')
+      if (unlistenStart) unlistenStart()
+      if (unlistenStop) unlistenStop()
 
       // 🔑 销毁缓存管理器
-      console.log('[RecordingFloat] 💥 Destroying AudioCacheManager');
-      audioCacheManager.destroy();
+      console.log('[RecordingFloat] 💥 Destroying AudioCacheManager')
+      audioCacheManager.destroy()
 
       // 🔑 关键修复：强制清理所有 AudioCapture 实例
-      console.log('[RecordingFloat] 🚨 Force cleaning all AudioCapture instances on unmount');
-      AudioCapture.cleanupAllInstances();
+      console.log('[RecordingFloat] 🚨 Force cleaning all AudioCapture instances on unmount')
+      AudioCapture.cleanupAllInstances()
 
       // Reset initialized flag on real unmount
-      initializedRef.current = false;
-    };
-  }, [audioCacheManager]);
+      initializedRef.current = false
+    }
+  }, [audioCacheManager])
 
   // Handle Esc key to close window
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        handleClose();
+        void handleClose()
       }
-    };
+    }
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   const handleClose = async () => {
-    console.log('[RecordingFloat] Closing window');
+    console.log('[RecordingFloat] Closing window')
 
     // 🔑 关键修复：关闭窗口前强制清理所有 AudioCapture 实例
-    console.log('[RecordingFloat] 🚨 Force cleaning all AudioCapture instances before closing');
-    AudioCapture.cleanupAllInstances();
+    console.log('[RecordingFloat] 🚨 Force cleaning all AudioCapture instances before closing')
+    AudioCapture.cleanupAllInstances()
 
-    const window = getCurrentWindow();
+    const window = getCurrentWindow()
 
     // 预览模式：直接隐藏窗口并清空文本
     if (operationMode === 'preview') {
-      await window.hide();
-      clearText();
+      await window.hide()
+      clearText()
     } else {
       // 直接插入模式：隐藏窗口并清空文本
-      await window.hide();
-      clearText();
+      await window.hide()
+      clearText()
     }
-  };
+  }
 
   const handleCopy = async () => {
-    await copyText();
-    setShowCopiedFeedback(true);
-    setTimeout(() => setShowCopiedFeedback(false), 2000);
-  };
+    await copyText()
+    setShowCopiedFeedback(true)
+    setTimeout(() => setShowCopiedFeedback(false), 2000)
+  }
 
   const handleInsert = async () => {
     // 关闭窗口并插入文本（应用激活由后端处理）
-    const window = getCurrentWindow();
-    await window.hide();
-    clearText();
+    const window = getCurrentWindow()
+    await window.hide()
+    clearText()
 
     // 插入文本（后端会自动激活原应用）
-    await insertText();
-  };
+    await insertText()
+  }
 
-  console.log('[RecordingFloat] 🎯 Rendering decision:', { status, hasText: !!transcribedText, operationMode });
+  console.log('[RecordingFloat] 🎯 Rendering decision:', {
+    status,
+    hasText: !!transcribedText,
+    operationMode,
+  })
 
   // 预览模式：始终显示录制状态，实时转录
   if (operationMode === 'preview') {
-    console.log('[RecordingFloat] 🎨 Rendering preview mode UI');
+    console.log('[RecordingFloat] 🎨 Rendering preview mode UI')
     return (
       <div className="fixed inset-0 flex items-center justify-center">
         <div
@@ -372,8 +413,8 @@ export const RecordingFloat = () => {
                   status === 'recording'
                     ? 'text-red-500 animate-pulse'
                     : status === 'processing'
-                    ? 'text-blue-500 animate-pulse'
-                    : 'text-red-500 animate-pulse'
+                      ? 'text-blue-500 animate-pulse'
+                      : 'text-red-500 animate-pulse'
                 }`}
               />
               {/* Recording indicator - pulsing ring */}
@@ -401,15 +442,13 @@ export const RecordingFloat = () => {
                   {transcribedText}
                 </p>
               ) : (
-                <p className="text-white/40 text-sm italic leading-relaxed">
-                  正在录制...
-                </p>
+                <p className="text-white/40 text-sm italic leading-relaxed">正在录制...</p>
               )}
             </div>
 
             {/* Right: Close button */}
             <button
-              onClick={handleClose}
+              onClick={() => void handleClose()}
               className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-600/60 hover:bg-gray-600/80
                 flex items-center justify-center transition-colors"
             >
@@ -421,35 +460,53 @@ export const RecordingFloat = () => {
           <div className="flex items-center justify-end gap-2 px-6 pb-3 pt-1">
             {/* Clear button */}
             <button
-              onClick={clearText}
+              onClick={() => void clearText()}
               disabled={!transcribedText || status === 'processing'}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md
                 border border-white/10 transition-all group
-                ${transcribedText && status !== 'processing'
-                  ? 'bg-white/5 hover:bg-white/10'
-                  : 'bg-white/5 opacity-50 cursor-not-allowed'}`}
+                ${
+                  transcribedText && status !== 'processing'
+                    ? 'bg-white/5 hover:bg-white/10'
+                    : 'bg-white/5 opacity-50 cursor-not-allowed'
+                }`}
               title="清空"
             >
-              <Trash2 className={`w-3 h-3 transition-colors ${transcribedText && status !== 'processing' ? 'text-white/70 group-hover:text-white' : 'text-white/40'}`} />
-              <span className={`text-xs ${transcribedText && status !== 'processing' ? 'text-white/80 group-hover:text-white' : 'text-white/40'}`}>清空</span>
+              <Trash2
+                className={`w-3 h-3 transition-colors ${transcribedText && status !== 'processing' ? 'text-white/70 group-hover:text-white' : 'text-white/40'}`}
+              />
+              <span
+                className={`text-xs ${transcribedText && status !== 'processing' ? 'text-white/80 group-hover:text-white' : 'text-white/40'}`}
+              >
+                清空
+              </span>
             </button>
 
             {/* Copy button */}
             <button
-              onClick={handleCopy}
+              onClick={() => void handleCopy()}
               disabled={!transcribedText || status === 'processing'}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md
                 border border-white/10 transition-all group relative
-                ${transcribedText && status !== 'processing'
-                  ? 'bg-white/5 hover:bg-white/10'
-                  : 'bg-white/5 opacity-50 cursor-not-allowed'}`}
+                ${
+                  transcribedText && status !== 'processing'
+                    ? 'bg-white/5 hover:bg-white/10'
+                    : 'bg-white/5 opacity-50 cursor-not-allowed'
+                }`}
               title="复制"
             >
-              <Copy className={`w-3 h-3 transition-colors ${transcribedText && status !== 'processing' ? 'text-white/70 group-hover:text-white' : 'text-white/40'}`} />
-              <span className={`text-xs ${transcribedText && status !== 'processing' ? 'text-white/80 group-hover:text-white' : 'text-white/40'}`}>复制</span>
+              <Copy
+                className={`w-3 h-3 transition-colors ${transcribedText && status !== 'processing' ? 'text-white/70 group-hover:text-white' : 'text-white/40'}`}
+              />
+              <span
+                className={`text-xs ${transcribedText && status !== 'processing' ? 'text-white/80 group-hover:text-white' : 'text-white/40'}`}
+              >
+                复制
+              </span>
               {showCopiedFeedback && (
-                <span className="absolute -top-8 left-1/2 -translate-x-1/2
-                  px-2 py-1 rounded-md bg-green-500 text-white text-xs whitespace-nowrap shadow-lg">
+                <span
+                  className="absolute -top-8 left-1/2 -translate-x-1/2
+                  px-2 py-1 rounded-md bg-green-500 text-white text-xs whitespace-nowrap shadow-lg"
+                >
                   已复制
                 </span>
               )}
@@ -457,88 +514,119 @@ export const RecordingFloat = () => {
 
             {/* Insert button */}
             <button
-              onClick={handleInsert}
+              onClick={() => void handleInsert()}
               disabled={!transcribedText || status === 'processing'}
               className={`flex items-center gap-1.5 px-3 py-1 rounded-md
                 border transition-all group
-                ${transcribedText && status !== 'processing'
-                  ? 'bg-blue-600/80 hover:bg-blue-600 border-blue-500/50'
-                  : 'bg-blue-600/30 border-blue-500/20 opacity-50 cursor-not-allowed'}`}
+                ${
+                  transcribedText && status !== 'processing'
+                    ? 'bg-blue-600/80 hover:bg-blue-600 border-blue-500/50'
+                    : 'bg-blue-600/30 border-blue-500/20 opacity-50 cursor-not-allowed'
+                }`}
               title="插入"
             >
-              <span className={`text-xs font-medium ${transcribedText && status !== 'processing' ? 'text-white' : 'text-white/40'}`}>插入</span>
-              <CornerDownLeft className={`w-3 h-3 ${transcribedText && status !== 'processing' ? 'text-white' : 'text-white/40'}`} />
+              <span
+                className={`text-xs font-medium ${transcribedText && status !== 'processing' ? 'text-white' : 'text-white/40'}`}
+              >
+                插入
+              </span>
+              <CornerDownLeft
+                className={`w-3 h-3 ${transcribedText && status !== 'processing' ? 'text-white' : 'text-white/40'}`}
+              />
             </button>
           </div>
         </div>
       </div>
-    );
+    )
   }
 
   // 直接插入模式：始终显示录制/转录UI（没有"准备就绪"状态）
   if (operationMode === 'direct') {
-    console.log('[RecordingFloat] 🎨🎨🎨 Rendering direct mode UI, status:', status);
-    console.log('[RecordingFloat] 🎨 transcribedText:', transcribedText);
-    console.log('[RecordingFloat] 🎨 Will show:', status === 'processing' ? '正在转录...' : '正在录制...');
+    console.log('[RecordingFloat] 🎨🎨🎨 Rendering direct mode UI, status:', status)
+    console.log('[RecordingFloat] 🎨 transcribedText:', transcribedText)
+    console.log(
+      '[RecordingFloat] 🎨 Will show:',
+      status === 'processing' ? '正在转录...' : '正在录制...',
+    )
     return (
-      <div className="fixed inset-0 flex items-center justify-center">
+      <div className="fixed inset-0 flex flex-col items-center justify-center gap-3">
+        {/* Tooltip-style notification - 独立气泡提示 */}
+        {toast && (
+          <div className="relative animate-in fade-in slide-in-from-top-2 duration-300">
+            {/* Tooltip 气泡 */}
+            <div className="px-3 py-2 rounded-lg bg-gray-800/95 backdrop-blur-sm shadow-lg border border-gray-700/50">
+              <InlineToast
+                type={toast.type}
+                message={toast.message}
+                dismissible={toast.dismissible}
+                duration={toast.duration}
+                onDismiss={clearToast}
+              />
+            </div>
+            {/* Tooltip 箭头 - 指向下方的录制状态 */}
+            <div
+              className="absolute left-1/2 -translate-x-1/2 -bottom-2 w-0 h-0
+              border-l-8 border-r-8 border-t-8
+              border-l-transparent border-r-transparent border-t-gray-800/95"
+            ></div>
+          </div>
+        )}
+
+        {/* Recording status UI - 独立的录制状态组件 */}
         <div
           ref={contentRef}
-          className="relative flex flex-col
-            w-[380px]
-            rounded-2xl
-            bg-gray-700/85 backdrop-blur-xl shadow-2xl
-            overflow-hidden"
+          className="relative flex items-center gap-3 px-4 py-2.5
+            w-[190px]
+            rounded-full
+            bg-gray-700/90 backdrop-blur-xl shadow-2xl
+            border border-gray-600/30"
         >
-          {/* Top row: Icon + Status + Close button */}
-          <div className="flex items-center gap-4 px-6 py-3.5">
-            {/* Left: Microphone icon with status animation */}
-            <div className="relative flex-shrink-0">
-              <Mic
-                className={`w-4 h-4 transition-colors ${
-                  status === 'recording'
-                    ? 'text-red-500 animate-pulse'
-                    : status === 'processing'
+          {/* Left: Microphone icon with status animation */}
+          <div className="relative flex-shrink-0">
+            <Mic
+              className={`w-4 h-4 transition-colors ${
+                status === 'recording'
+                  ? 'text-red-500 animate-pulse'
+                  : status === 'processing'
                     ? 'text-blue-500 animate-pulse'
                     : 'text-red-500 animate-pulse'
-                }`}
-              />
-              {/* Recording indicator - pulsing ring */}
-              {(status === 'recording' || status === 'idle') && (
-                <span className="absolute inset-0 flex items-center justify-center">
-                  <span className="absolute w-6 h-6 bg-red-500/30 rounded-full animate-ping"></span>
-                </span>
-              )}
-              {/* Processing indicator - spinning ring */}
-              {status === 'processing' && (
-                <span className="absolute inset-0 flex items-center justify-center">
-                  <span className="absolute w-6 h-6 border-2 border-blue-500/50 border-t-blue-500 rounded-full animate-spin"></span>
-                </span>
-              )}
-            </div>
-
-            {/* Center: Status text */}
-            <div className="flex-1">
-              <p className="text-white/70 text-sm">
-                {status === 'processing' ? '正在转录...' : '正在录制...'}
-              </p>
-            </div>
-
-            {/* Right: Close button */}
-            <button
-              onClick={handleClose}
-              className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-600/60 hover:bg-gray-600/80
-                flex items-center justify-center transition-colors"
-            >
-              <X className="w-3 h-3 text-white/90" />
-            </button>
+              }`}
+            />
+            {/* Recording indicator - pulsing ring */}
+            {(status === 'recording' || status === 'idle') && (
+              <span className="absolute inset-0 flex items-center justify-center">
+                <span className="absolute w-6 h-6 bg-red-500/30 rounded-full animate-ping"></span>
+              </span>
+            )}
+            {/* Processing indicator - spinning ring */}
+            {status === 'processing' && (
+              <span className="absolute inset-0 flex items-center justify-center">
+                <span className="absolute w-6 h-6 border-2 border-blue-500/50 border-t-blue-500 rounded-full animate-spin"></span>
+              </span>
+            )}
           </div>
+
+          {/* Center: Status text */}
+          <div className="flex-1 min-w-0">
+            <p className="text-white/80 text-xs truncate">
+              {status === 'processing' ? '正在转录...' : '正在录制...'}
+            </p>
+          </div>
+
+          {/* Right: Close button */}
+          <button
+            onClick={() => void handleClose()}
+            className="flex-shrink-0 w-4 h-4 rounded-full bg-gray-600/60 hover:bg-gray-600/90
+              flex items-center justify-center transition-colors"
+          >
+            <X className="w-2.5 h-2.5 text-white/90" />
+          </button>
         </div>
       </div>
-    );
+    )
   }
 
   // 预览模式的默认状态不应该出现
-  console.log('[RecordingFloat] ⚠️  Unexpected state - should not reach here');
-  return null;
-};
+  console.log('[RecordingFloat] ⚠️  Unexpected state - should not reach here')
+  return null
+}

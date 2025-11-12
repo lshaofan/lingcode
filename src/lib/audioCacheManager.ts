@@ -39,32 +39,37 @@ export class AudioCacheManager {
       return
     }
 
-    this.deviceChangeListener = async () => {
+    this.deviceChangeListener = () => {
       console.log('[AudioCacheManager] 🔄 Device changed detected!')
 
-      // 获取当前设备列表
-      try {
-        const devices = await navigator.mediaDevices.enumerateDevices()
-        const audioInputs = devices.filter((d) => d.kind === 'audioinput')
-        console.log('[AudioCacheManager] Current audio input devices:', audioInputs.length)
-        audioInputs.forEach((device, i) => {
-          console.log(`  [${i}] ${device.label || 'Unknown Device'} (${device.deviceId.substring(0, 8)}...)`)
-        })
-      } catch (error) {
-        console.error('[AudioCacheManager] Failed to enumerate devices:', error)
-      }
+      // 使用 void 标记异步操作
+      void (async () => {
+        // 获取当前设备列表
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices()
+          const audioInputs = devices.filter((d) => d.kind === 'audioinput')
+          console.log('[AudioCacheManager] Current audio input devices:', audioInputs.length)
+          audioInputs.forEach((device, i) => {
+            console.log(
+              `  [${i}] ${device.label || 'Unknown Device'} (${device.deviceId.substring(0, 8)}...)`,
+            )
+          })
+        } catch (error) {
+          console.error('[AudioCacheManager] Failed to enumerate devices:', error)
+        }
 
-      // 失效缓存
-      this.invalidate()
+        // 失效缓存
+        this.invalidate()
 
-      // 后台自动重新预热
-      console.log('[AudioCacheManager] 🔥 Auto re-prewarming after device change...')
-      try {
-        await this.prewarm()
-        console.log('[AudioCacheManager] ✅ Auto re-prewarm completed')
-      } catch (error) {
-        console.error('[AudioCacheManager] ❌ Auto re-prewarm failed:', error)
-      }
+        // 后台自动重新预热
+        console.log('[AudioCacheManager] 🔥 Auto re-prewarming after device change...')
+        try {
+          await this.prewarm()
+          console.log('[AudioCacheManager] ✅ Auto re-prewarm completed')
+        } catch (error) {
+          console.error('[AudioCacheManager] ❌ Auto re-prewarm failed:', error)
+        }
+      })()
     }
 
     navigator.mediaDevices.addEventListener('devicechange', this.deviceChangeListener)
